@@ -1,9 +1,13 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { Outlet, createFileRoute, redirect } from '@tanstack/react-router';
 
 export const Route = createFileRoute('/_authenticated/authenticated')({
-  component: AuthenticatedPage,
+  loader: ({ location }) => {
+    if (location.pathname === '/authenticated') {
+      throw redirect({
+        to: '/$projectId/$view',
+        params: { projectId: 'all', view: 'issues' },
+      });
+    }
+  },
+  component: () => <Outlet />,
 });
-
-function AuthenticatedPage() {
-  return <p>Welcome!</p>;
-}

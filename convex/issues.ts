@@ -87,9 +87,18 @@ export const createIssue = zMutation({
     const viewerId = await requireViewerId(ctx);
     const now = Date.now();
 
+    if (args.projectId) {
+      const project = await ctx.db.get(args.projectId);
+      if (!project) {
+        throw new ConvexError('Project not found');
+      }
+      await ctx.db.patch(args.projectId, { lastActivityAt: now });
+    }
+
     const issueId = await ctx.db.insert('issues', {
       source: 'app',
       externalId: null,
+      projectId: args.projectId ?? null,
       title: args.title.trim(),
       description: args.description?.trim() ?? null,
       status: 'open',
@@ -111,18 +120,34 @@ export const listIssues = zQuery({
     const limit = args.limit ?? 50;
     const includeArchived = args.includeArchived ?? false;
 
-    if (args.status) {
+    let items: any[];
+
+    if (args.projectId) {
+      const projectId = args.projectId;
+      items = await ctx.db
+        .query('issues')
+        .withIndex('by_project_last_activity', (q) => q.eq('projectId', projectId))
+        .order('desc')
+        .take(limit);
+    } else if (args.status) {
       const status = args.status;
-      const items = await ctx.db
+      items = await ctx.db
         .query('issues')
         .withIndex('by_status', (q) => q.eq('status', status))
         .order('desc')
         .take(limit);
-      return includeArchived ? items : items.filter((i) => i.archivedAt === null);
+    } else {
+      items = await ctx.db.query('issues').withIndex('by_last_activity').order('desc').take(limit);
     }
 
-    const items = await ctx.db.query('issues').withIndex('by_last_activity').order('desc').take(limit);
-    return includeArchived ? items : items.filter((i) => i.archivedAt === null);
+    if (!includeArchived) {
+      items = items.filter((i) => i.archivedAt === null);
+    }
+    if (args.projectId && args.status) {
+      items = items.filter((i) => i.status === args.status);
+    }
+
+    return items;
   },
 });
 
@@ -208,6 +233,21 @@ export const listIssueComments = zQuery({
     return await ctx.db
       .query('issueComments')
       .withIndex('by_issue_parent', (q) => q.eq('issueId', args.issueId).eq('parentCommentId', parentCommentId))
+      .order('asc')
+      .take(limit);
+  },
+});
+
+export const listIssueCommentsFlat = zQuery({
+  args: {
+    issueId: addIssueCommentArgsSchema.shape.issueId,
+    limit: listIssuesArgsSchema.shape.limit,
+  },
+  handler: async (ctx, args) => {
+    const limit = args.limit ?? 200;
+    return await ctx.db
+      .query('issueComments')
+      .withIndex('by_issue', (q) => q.eq('issueId', args.issueId))
       .order('asc')
       .take(limit);
   },

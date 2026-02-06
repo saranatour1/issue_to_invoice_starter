@@ -11,6 +11,8 @@
 import type * as issueModel from "../issueModel.js";
 import type * as issues from "../issues.js";
 import type * as notifications from "../notifications.js";
+import type * as projects from "../projects.js";
+import type * as time from "../time.js";
 import type * as users from "../users.js";
 
 import type {
@@ -23,6 +25,8 @@ declare const fullApi: ApiFromModules<{
   issueModel: typeof issueModel;
   issues: typeof issues;
   notifications: typeof notifications;
+  projects: typeof projects;
+  time: typeof time;
   users: typeof users;
 }>;
 

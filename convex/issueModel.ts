@@ -23,10 +23,14 @@ export type NotificationType = z.infer<typeof NotificationTypeSchema>;
 export const IssueIdSchema = zid('issues');
 export const IssueCommentIdSchema = zid('issueComments');
 export const NotificationIdSchema = zid('notifications');
+export const ProjectIdSchema = zid('projects');
+export const TimeEntryIdSchema = zid('timeEntries');
 
 export const issueTableFields = {
   source: IssueSourceSchema,
   externalId: z.string().max(256).nullable(),
+
+  projectId: ProjectIdSchema.nullable(),
 
   title: z.string().min(1).max(200),
   description: z.string().max(50_000).nullable(),
@@ -87,7 +91,30 @@ export const userTableFields = {
   lastSeenAt: z.number().int(),
 };
 
+export const projectTableFields = {
+  name: z.string().min(1).max(100),
+  description: z.string().max(2_000).nullable(),
+  color: z.string().max(32).nullable(),
+
+  creatorId: z.string(),
+  memberIds: z.array(z.string()),
+
+  archivedAt: z.number().int().nullable(),
+  lastActivityAt: z.number().int(),
+};
+
+export const timeEntryTableFields = {
+  userId: z.string(),
+  issueId: IssueIdSchema.nullable(),
+  projectId: ProjectIdSchema.nullable(),
+
+  description: z.string().max(500).nullable(),
+  startedAt: z.number().int(),
+  endedAt: z.number().int().nullable(),
+};
+
 export const createIssueArgsSchema = z.object({
+  projectId: ProjectIdSchema.optional(),
   title: z.string().min(1).max(200),
   description: z.string().max(50_000).optional(),
   estimateMinutes: z.number().int().nonnegative().optional(),
@@ -100,6 +127,7 @@ export const setIssueAssigneesArgsSchema = z.object({
 });
 
 export const listIssuesArgsSchema = z.object({
+  projectId: ProjectIdSchema.optional(),
   status: IssueStatusSchema.optional(),
   includeArchived: z.boolean().optional(),
   limit: z.number().int().min(1).max(200).optional(),
@@ -132,4 +160,38 @@ export const getUserByUserIdArgsSchema = z.object({
 
 export const listUsersByUserIdsArgsSchema = z.object({
   userIds: z.array(z.string()).max(200),
+});
+
+export const createProjectArgsSchema = z.object({
+  name: z.string().min(1).max(100),
+  description: z.string().max(2_000).optional(),
+  color: z.string().max(32).optional(),
+});
+
+export const listProjectsArgsSchema = z.object({
+  includeArchived: z.boolean().optional(),
+  limit: z.number().int().min(1).max(200).optional(),
+});
+
+export const getProjectArgsSchema = z.object({
+  projectId: ProjectIdSchema,
+});
+
+export const startTimerArgsSchema = z.object({
+  issueId: IssueIdSchema.optional(),
+  projectId: ProjectIdSchema.optional(),
+  description: z.string().max(500).optional(),
+});
+
+export const stopTimerArgsSchema = z.object({
+  timeEntryId: TimeEntryIdSchema.optional(),
+});
+
+export const listTimeEntriesArgsSchema = z.object({
+  limit: z.number().int().min(1).max(200).optional(),
+});
+
+export const listTimeEntriesForIssueArgsSchema = z.object({
+  issueId: IssueIdSchema,
+  limit: z.number().int().min(1).max(200).optional(),
 });

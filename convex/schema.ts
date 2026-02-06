@@ -6,6 +6,8 @@ import {
   issueReactionTableFields,
   issueTableFields,
   notificationTableFields,
+  projectTableFields,
+  timeEntryTableFields,
   userTableFields,
 } from './issueModel';
 
@@ -14,9 +16,15 @@ export default defineSchema({
     .index('by_userId', ['userId'])
     .index('by_tokenIdentifier', ['tokenIdentifier']),
 
+  projects: defineTable(zodToConvexFields(projectTableFields))
+    .index('by_archived', ['archivedAt'])
+    .index('by_creator', ['creatorId'])
+    .index('by_last_activity', ['lastActivityAt']),
+
   issues: defineTable(zodToConvexFields(issueTableFields))
     .index('by_status', ['status'])
     .index('by_creator', ['creatorId'])
+    .index('by_project_last_activity', ['projectId', 'lastActivityAt'])
     .index('by_source_external', ['source', 'externalId'])
     .index('by_archived', ['archivedAt'])
     .index('by_last_activity', ['lastActivityAt']),
@@ -30,6 +38,13 @@ export default defineSchema({
     .index('by_issue', ['issueId'])
     .index('by_comment', ['commentId'])
     .index('by_target_user_emoji', ['issueId', 'commentId', 'userId', 'emoji']),
+
+  timeEntries: defineTable(zodToConvexFields(timeEntryTableFields))
+    .index('by_user_started', ['userId', 'startedAt'])
+    .index('by_user_ended', ['userId', 'endedAt'])
+    .index('by_issue_started', ['issueId', 'startedAt'])
+    .index('by_issue_user_started', ['issueId', 'userId', 'startedAt'])
+    .index('by_project_started', ['projectId', 'startedAt']),
 
   notifications: defineTable(zodToConvexFields(notificationTableFields))
     .index('by_user', ['userId'])

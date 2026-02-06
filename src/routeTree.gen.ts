@@ -13,6 +13,9 @@ import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedAuthenticatedRouteImport } from './routes/_authenticated/authenticated'
+import { Route as AuthenticatedProjectIdRouteImport } from './routes/_authenticated/$projectId'
+import { Route as AuthenticatedProjectIdViewRouteImport } from './routes/_authenticated/$projectId.$view'
+import { Route as AuthenticatedProjectIdViewIssueIdRouteImport } from './routes/_authenticated/$projectId.$view.$issueId'
 
 const CallbackRoute = CallbackRouteImport.update({
   id: '/callback',
@@ -34,35 +37,76 @@ const AuthenticatedAuthenticatedRoute =
     path: '/authenticated',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedProjectIdRoute = AuthenticatedProjectIdRouteImport.update({
+  id: '/$projectId',
+  path: '/$projectId',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedProjectIdViewRoute =
+  AuthenticatedProjectIdViewRouteImport.update({
+    id: '/$view',
+    path: '/$view',
+    getParentRoute: () => AuthenticatedProjectIdRoute,
+  } as any)
+const AuthenticatedProjectIdViewIssueIdRoute =
+  AuthenticatedProjectIdViewIssueIdRouteImport.update({
+    id: '/$issueId',
+    path: '/$issueId',
+    getParentRoute: () => AuthenticatedProjectIdViewRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/callback': typeof CallbackRoute
+  '/$projectId': typeof AuthenticatedProjectIdRouteWithChildren
   '/authenticated': typeof AuthenticatedAuthenticatedRoute
+  '/$projectId/$view': typeof AuthenticatedProjectIdViewRouteWithChildren
+  '/$projectId/$view/$issueId': typeof AuthenticatedProjectIdViewIssueIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/callback': typeof CallbackRoute
+  '/$projectId': typeof AuthenticatedProjectIdRouteWithChildren
   '/authenticated': typeof AuthenticatedAuthenticatedRoute
+  '/$projectId/$view': typeof AuthenticatedProjectIdViewRouteWithChildren
+  '/$projectId/$view/$issueId': typeof AuthenticatedProjectIdViewIssueIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/callback': typeof CallbackRoute
+  '/_authenticated/$projectId': typeof AuthenticatedProjectIdRouteWithChildren
   '/_authenticated/authenticated': typeof AuthenticatedAuthenticatedRoute
+  '/_authenticated/$projectId/$view': typeof AuthenticatedProjectIdViewRouteWithChildren
+  '/_authenticated/$projectId/$view/$issueId': typeof AuthenticatedProjectIdViewIssueIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/callback' | '/authenticated'
+  fullPaths:
+    | '/'
+    | '/callback'
+    | '/$projectId'
+    | '/authenticated'
+    | '/$projectId/$view'
+    | '/$projectId/$view/$issueId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/callback' | '/authenticated'
+  to:
+    | '/'
+    | '/callback'
+    | '/$projectId'
+    | '/authenticated'
+    | '/$projectId/$view'
+    | '/$projectId/$view/$issueId'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/callback'
+    | '/_authenticated/$projectId'
     | '/_authenticated/authenticated'
+    | '/_authenticated/$projectId/$view'
+    | '/_authenticated/$projectId/$view/$issueId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -101,14 +145,67 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAuthenticatedRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/$projectId': {
+      id: '/_authenticated/$projectId'
+      path: '/$projectId'
+      fullPath: '/$projectId'
+      preLoaderRoute: typeof AuthenticatedProjectIdRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/$projectId/$view': {
+      id: '/_authenticated/$projectId/$view'
+      path: '/$view'
+      fullPath: '/$projectId/$view'
+      preLoaderRoute: typeof AuthenticatedProjectIdViewRouteImport
+      parentRoute: typeof AuthenticatedProjectIdRoute
+    }
+    '/_authenticated/$projectId/$view/$issueId': {
+      id: '/_authenticated/$projectId/$view/$issueId'
+      path: '/$issueId'
+      fullPath: '/$projectId/$view/$issueId'
+      preLoaderRoute: typeof AuthenticatedProjectIdViewIssueIdRouteImport
+      parentRoute: typeof AuthenticatedProjectIdViewRoute
+    }
   }
 }
 
+interface AuthenticatedProjectIdViewRouteChildren {
+  AuthenticatedProjectIdViewIssueIdRoute: typeof AuthenticatedProjectIdViewIssueIdRoute
+}
+
+const AuthenticatedProjectIdViewRouteChildren: AuthenticatedProjectIdViewRouteChildren =
+  {
+    AuthenticatedProjectIdViewIssueIdRoute:
+      AuthenticatedProjectIdViewIssueIdRoute,
+  }
+
+const AuthenticatedProjectIdViewRouteWithChildren =
+  AuthenticatedProjectIdViewRoute._addFileChildren(
+    AuthenticatedProjectIdViewRouteChildren,
+  )
+
+interface AuthenticatedProjectIdRouteChildren {
+  AuthenticatedProjectIdViewRoute: typeof AuthenticatedProjectIdViewRouteWithChildren
+}
+
+const AuthenticatedProjectIdRouteChildren: AuthenticatedProjectIdRouteChildren =
+  {
+    AuthenticatedProjectIdViewRoute:
+      AuthenticatedProjectIdViewRouteWithChildren,
+  }
+
+const AuthenticatedProjectIdRouteWithChildren =
+  AuthenticatedProjectIdRoute._addFileChildren(
+    AuthenticatedProjectIdRouteChildren,
+  )
+
 interface AuthenticatedRouteChildren {
+  AuthenticatedProjectIdRoute: typeof AuthenticatedProjectIdRouteWithChildren
   AuthenticatedAuthenticatedRoute: typeof AuthenticatedAuthenticatedRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedProjectIdRoute: AuthenticatedProjectIdRouteWithChildren,
   AuthenticatedAuthenticatedRoute: AuthenticatedAuthenticatedRoute,
 }
 

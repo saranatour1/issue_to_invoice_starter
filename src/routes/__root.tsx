@@ -6,6 +6,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import type { ConvexReactClient } from 'convex/react';
 import type { ConvexQueryClient } from '@convex-dev/react-query';
+import { TanStackDevtools } from '@tanstack/react-devtools'
 
 const fetchWorkosAuth = createServerFn({ method: 'GET' }).handler(async () => {
   const auth = await getAuth();
@@ -71,6 +72,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
       </head>
       <body>
         {children}
+              <TanStackDevtools />
         <Scripts />
       </body>
     </html>
