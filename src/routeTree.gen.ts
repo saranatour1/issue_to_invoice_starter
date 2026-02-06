@@ -12,10 +12,12 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthenticatedAuthenticatedRouteImport } from './routes/_authenticated/authenticated'
 import { Route as AuthenticatedProjectIdRouteImport } from './routes/_authenticated/$projectId'
-import { Route as AuthenticatedProjectIdViewRouteImport } from './routes/_authenticated/$projectId.$view'
-import { Route as AuthenticatedProjectIdViewIssueIdRouteImport } from './routes/_authenticated/$projectId.$view.$issueId'
+import { Route as AuthenticatedProjectIdTimeRouteImport } from './routes/_authenticated/$projectId.time'
+import { Route as AuthenticatedProjectIdIssuesRouteImport } from './routes/_authenticated/$projectId.issues'
+import { Route as AuthenticatedProjectIdInvoicesRouteImport } from './routes/_authenticated/$projectId.invoices'
+import { Route as AuthenticatedProjectIdTimeIssueIdRouteImport } from './routes/_authenticated/$projectId.time.$issueId'
+import { Route as AuthenticatedProjectIdIssuesIssueIdRouteImport } from './routes/_authenticated/$projectId.issues.$issueId'
 
 const CallbackRoute = CallbackRouteImport.update({
   id: '/callback',
@@ -31,45 +33,61 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthenticatedAuthenticatedRoute =
-  AuthenticatedAuthenticatedRouteImport.update({
-    id: '/authenticated',
-    path: '/authenticated',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
 const AuthenticatedProjectIdRoute = AuthenticatedProjectIdRouteImport.update({
   id: '/$projectId',
   path: '/$projectId',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedProjectIdViewRoute =
-  AuthenticatedProjectIdViewRouteImport.update({
-    id: '/$view',
-    path: '/$view',
+const AuthenticatedProjectIdTimeRoute =
+  AuthenticatedProjectIdTimeRouteImport.update({
+    id: '/time',
+    path: '/time',
     getParentRoute: () => AuthenticatedProjectIdRoute,
   } as any)
-const AuthenticatedProjectIdViewIssueIdRoute =
-  AuthenticatedProjectIdViewIssueIdRouteImport.update({
+const AuthenticatedProjectIdIssuesRoute =
+  AuthenticatedProjectIdIssuesRouteImport.update({
+    id: '/issues',
+    path: '/issues',
+    getParentRoute: () => AuthenticatedProjectIdRoute,
+  } as any)
+const AuthenticatedProjectIdInvoicesRoute =
+  AuthenticatedProjectIdInvoicesRouteImport.update({
+    id: '/invoices',
+    path: '/invoices',
+    getParentRoute: () => AuthenticatedProjectIdRoute,
+  } as any)
+const AuthenticatedProjectIdTimeIssueIdRoute =
+  AuthenticatedProjectIdTimeIssueIdRouteImport.update({
     id: '/$issueId',
     path: '/$issueId',
-    getParentRoute: () => AuthenticatedProjectIdViewRoute,
+    getParentRoute: () => AuthenticatedProjectIdTimeRoute,
+  } as any)
+const AuthenticatedProjectIdIssuesIssueIdRoute =
+  AuthenticatedProjectIdIssuesIssueIdRouteImport.update({
+    id: '/$issueId',
+    path: '/$issueId',
+    getParentRoute: () => AuthenticatedProjectIdIssuesRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/callback': typeof CallbackRoute
   '/$projectId': typeof AuthenticatedProjectIdRouteWithChildren
-  '/authenticated': typeof AuthenticatedAuthenticatedRoute
-  '/$projectId/$view': typeof AuthenticatedProjectIdViewRouteWithChildren
-  '/$projectId/$view/$issueId': typeof AuthenticatedProjectIdViewIssueIdRoute
+  '/$projectId/invoices': typeof AuthenticatedProjectIdInvoicesRoute
+  '/$projectId/issues': typeof AuthenticatedProjectIdIssuesRouteWithChildren
+  '/$projectId/time': typeof AuthenticatedProjectIdTimeRouteWithChildren
+  '/$projectId/issues/$issueId': typeof AuthenticatedProjectIdIssuesIssueIdRoute
+  '/$projectId/time/$issueId': typeof AuthenticatedProjectIdTimeIssueIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/callback': typeof CallbackRoute
   '/$projectId': typeof AuthenticatedProjectIdRouteWithChildren
-  '/authenticated': typeof AuthenticatedAuthenticatedRoute
-  '/$projectId/$view': typeof AuthenticatedProjectIdViewRouteWithChildren
-  '/$projectId/$view/$issueId': typeof AuthenticatedProjectIdViewIssueIdRoute
+  '/$projectId/invoices': typeof AuthenticatedProjectIdInvoicesRoute
+  '/$projectId/issues': typeof AuthenticatedProjectIdIssuesRouteWithChildren
+  '/$projectId/time': typeof AuthenticatedProjectIdTimeRouteWithChildren
+  '/$projectId/issues/$issueId': typeof AuthenticatedProjectIdIssuesIssueIdRoute
+  '/$projectId/time/$issueId': typeof AuthenticatedProjectIdTimeIssueIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -77,9 +95,11 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/callback': typeof CallbackRoute
   '/_authenticated/$projectId': typeof AuthenticatedProjectIdRouteWithChildren
-  '/_authenticated/authenticated': typeof AuthenticatedAuthenticatedRoute
-  '/_authenticated/$projectId/$view': typeof AuthenticatedProjectIdViewRouteWithChildren
-  '/_authenticated/$projectId/$view/$issueId': typeof AuthenticatedProjectIdViewIssueIdRoute
+  '/_authenticated/$projectId/invoices': typeof AuthenticatedProjectIdInvoicesRoute
+  '/_authenticated/$projectId/issues': typeof AuthenticatedProjectIdIssuesRouteWithChildren
+  '/_authenticated/$projectId/time': typeof AuthenticatedProjectIdTimeRouteWithChildren
+  '/_authenticated/$projectId/issues/$issueId': typeof AuthenticatedProjectIdIssuesIssueIdRoute
+  '/_authenticated/$projectId/time/$issueId': typeof AuthenticatedProjectIdTimeIssueIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -87,26 +107,32 @@ export interface FileRouteTypes {
     | '/'
     | '/callback'
     | '/$projectId'
-    | '/authenticated'
-    | '/$projectId/$view'
-    | '/$projectId/$view/$issueId'
+    | '/$projectId/invoices'
+    | '/$projectId/issues'
+    | '/$projectId/time'
+    | '/$projectId/issues/$issueId'
+    | '/$projectId/time/$issueId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/callback'
     | '/$projectId'
-    | '/authenticated'
-    | '/$projectId/$view'
-    | '/$projectId/$view/$issueId'
+    | '/$projectId/invoices'
+    | '/$projectId/issues'
+    | '/$projectId/time'
+    | '/$projectId/issues/$issueId'
+    | '/$projectId/time/$issueId'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/callback'
     | '/_authenticated/$projectId'
-    | '/_authenticated/authenticated'
-    | '/_authenticated/$projectId/$view'
-    | '/_authenticated/$projectId/$view/$issueId'
+    | '/_authenticated/$projectId/invoices'
+    | '/_authenticated/$projectId/issues'
+    | '/_authenticated/$projectId/time'
+    | '/_authenticated/$projectId/issues/$issueId'
+    | '/_authenticated/$projectId/time/$issueId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -138,13 +164,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated/authenticated': {
-      id: '/_authenticated/authenticated'
-      path: '/authenticated'
-      fullPath: '/authenticated'
-      preLoaderRoute: typeof AuthenticatedAuthenticatedRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
     '/_authenticated/$projectId': {
       id: '/_authenticated/$projectId'
       path: '/$projectId'
@@ -152,46 +171,87 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProjectIdRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/$projectId/$view': {
-      id: '/_authenticated/$projectId/$view'
-      path: '/$view'
-      fullPath: '/$projectId/$view'
-      preLoaderRoute: typeof AuthenticatedProjectIdViewRouteImport
+    '/_authenticated/$projectId/time': {
+      id: '/_authenticated/$projectId/time'
+      path: '/time'
+      fullPath: '/$projectId/time'
+      preLoaderRoute: typeof AuthenticatedProjectIdTimeRouteImport
       parentRoute: typeof AuthenticatedProjectIdRoute
     }
-    '/_authenticated/$projectId/$view/$issueId': {
-      id: '/_authenticated/$projectId/$view/$issueId'
+    '/_authenticated/$projectId/issues': {
+      id: '/_authenticated/$projectId/issues'
+      path: '/issues'
+      fullPath: '/$projectId/issues'
+      preLoaderRoute: typeof AuthenticatedProjectIdIssuesRouteImport
+      parentRoute: typeof AuthenticatedProjectIdRoute
+    }
+    '/_authenticated/$projectId/invoices': {
+      id: '/_authenticated/$projectId/invoices'
+      path: '/invoices'
+      fullPath: '/$projectId/invoices'
+      preLoaderRoute: typeof AuthenticatedProjectIdInvoicesRouteImport
+      parentRoute: typeof AuthenticatedProjectIdRoute
+    }
+    '/_authenticated/$projectId/time/$issueId': {
+      id: '/_authenticated/$projectId/time/$issueId'
       path: '/$issueId'
-      fullPath: '/$projectId/$view/$issueId'
-      preLoaderRoute: typeof AuthenticatedProjectIdViewIssueIdRouteImport
-      parentRoute: typeof AuthenticatedProjectIdViewRoute
+      fullPath: '/$projectId/time/$issueId'
+      preLoaderRoute: typeof AuthenticatedProjectIdTimeIssueIdRouteImport
+      parentRoute: typeof AuthenticatedProjectIdTimeRoute
+    }
+    '/_authenticated/$projectId/issues/$issueId': {
+      id: '/_authenticated/$projectId/issues/$issueId'
+      path: '/$issueId'
+      fullPath: '/$projectId/issues/$issueId'
+      preLoaderRoute: typeof AuthenticatedProjectIdIssuesIssueIdRouteImport
+      parentRoute: typeof AuthenticatedProjectIdIssuesRoute
     }
   }
 }
 
-interface AuthenticatedProjectIdViewRouteChildren {
-  AuthenticatedProjectIdViewIssueIdRoute: typeof AuthenticatedProjectIdViewIssueIdRoute
+interface AuthenticatedProjectIdIssuesRouteChildren {
+  AuthenticatedProjectIdIssuesIssueIdRoute: typeof AuthenticatedProjectIdIssuesIssueIdRoute
 }
 
-const AuthenticatedProjectIdViewRouteChildren: AuthenticatedProjectIdViewRouteChildren =
+const AuthenticatedProjectIdIssuesRouteChildren: AuthenticatedProjectIdIssuesRouteChildren =
   {
-    AuthenticatedProjectIdViewIssueIdRoute:
-      AuthenticatedProjectIdViewIssueIdRoute,
+    AuthenticatedProjectIdIssuesIssueIdRoute:
+      AuthenticatedProjectIdIssuesIssueIdRoute,
   }
 
-const AuthenticatedProjectIdViewRouteWithChildren =
-  AuthenticatedProjectIdViewRoute._addFileChildren(
-    AuthenticatedProjectIdViewRouteChildren,
+const AuthenticatedProjectIdIssuesRouteWithChildren =
+  AuthenticatedProjectIdIssuesRoute._addFileChildren(
+    AuthenticatedProjectIdIssuesRouteChildren,
+  )
+
+interface AuthenticatedProjectIdTimeRouteChildren {
+  AuthenticatedProjectIdTimeIssueIdRoute: typeof AuthenticatedProjectIdTimeIssueIdRoute
+}
+
+const AuthenticatedProjectIdTimeRouteChildren: AuthenticatedProjectIdTimeRouteChildren =
+  {
+    AuthenticatedProjectIdTimeIssueIdRoute:
+      AuthenticatedProjectIdTimeIssueIdRoute,
+  }
+
+const AuthenticatedProjectIdTimeRouteWithChildren =
+  AuthenticatedProjectIdTimeRoute._addFileChildren(
+    AuthenticatedProjectIdTimeRouteChildren,
   )
 
 interface AuthenticatedProjectIdRouteChildren {
-  AuthenticatedProjectIdViewRoute: typeof AuthenticatedProjectIdViewRouteWithChildren
+  AuthenticatedProjectIdInvoicesRoute: typeof AuthenticatedProjectIdInvoicesRoute
+  AuthenticatedProjectIdIssuesRoute: typeof AuthenticatedProjectIdIssuesRouteWithChildren
+  AuthenticatedProjectIdTimeRoute: typeof AuthenticatedProjectIdTimeRouteWithChildren
 }
 
 const AuthenticatedProjectIdRouteChildren: AuthenticatedProjectIdRouteChildren =
   {
-    AuthenticatedProjectIdViewRoute:
-      AuthenticatedProjectIdViewRouteWithChildren,
+    AuthenticatedProjectIdInvoicesRoute: AuthenticatedProjectIdInvoicesRoute,
+    AuthenticatedProjectIdIssuesRoute:
+      AuthenticatedProjectIdIssuesRouteWithChildren,
+    AuthenticatedProjectIdTimeRoute:
+      AuthenticatedProjectIdTimeRouteWithChildren,
   }
 
 const AuthenticatedProjectIdRouteWithChildren =
@@ -201,12 +261,10 @@ const AuthenticatedProjectIdRouteWithChildren =
 
 interface AuthenticatedRouteChildren {
   AuthenticatedProjectIdRoute: typeof AuthenticatedProjectIdRouteWithChildren
-  AuthenticatedAuthenticatedRoute: typeof AuthenticatedAuthenticatedRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedProjectIdRoute: AuthenticatedProjectIdRouteWithChildren,
-  AuthenticatedAuthenticatedRoute: AuthenticatedAuthenticatedRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

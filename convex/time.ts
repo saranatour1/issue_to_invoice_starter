@@ -22,12 +22,12 @@ async function requireViewerId(ctx: { auth: { getUserIdentity: () => Promise<{ s
 }
 
 async function enrichTimeEntry(
-  ctx: { db: { get: (id: any) => Promise<any> } },
+  ctx: { db: { get: (tableName: string, id: any) => Promise<any> } },
   entry: any,
 ) {
   const [issue, project] = await Promise.all([
-    entry.issueId ? ctx.db.get(entry.issueId) : Promise.resolve(null),
-    entry.projectId ? ctx.db.get(entry.projectId) : Promise.resolve(null),
+    entry.issueId ? ctx.db.get('issues', entry.issueId) : Promise.resolve(null),
+    entry.projectId ? ctx.db.get('projects', entry.projectId) : Promise.resolve(null),
   ]);
 
   return {
@@ -47,8 +47,8 @@ export const getActiveForViewer = zQuery({
       .withIndex('by_user_ended', (q) => q.eq('userId', viewerId).eq('endedAt', null))
       .take(1);
 
-    const entry = active[0] ?? null;
-    if (!entry) return null;
+    const entry = active.at(0) ?? null;
+    if (entry === null) return null;
     return await enrichTimeEntry(ctx, entry);
   },
 });
@@ -59,13 +59,13 @@ export const startTimer = zMutation({
     const viewerId = await requireViewerId(ctx);
     const now = Date.now();
 
-    const issue = args.issueId ? await ctx.db.get(args.issueId) : null;
+    const issue = args.issueId ? await ctx.db.get('issues', args.issueId) : null;
     if (args.issueId && !issue) {
       throw new ConvexError('Issue not found');
     }
 
     const projectId = args.projectId ?? issue?.projectId ?? null;
-    const project = projectId ? await ctx.db.get(projectId) : null;
+    const project = projectId ? await ctx.db.get('projects', projectId) : null;
     if (projectId && !project) {
       throw new ConvexError('Project not found');
     }
@@ -77,7 +77,7 @@ export const startTimer = zMutation({
       .collect();
 
     for (const entry of active) {
-      await ctx.db.patch(entry._id, { endedAt: now });
+      await ctx.db.patch('timeEntries', entry._id, { endedAt: now });
     }
 
     const timeEntryId = await ctx.db.insert('timeEntries', {
@@ -90,10 +90,10 @@ export const startTimer = zMutation({
     });
 
     if (args.issueId) {
-      await ctx.db.patch(args.issueId, { lastActivityAt: now });
+      await ctx.db.patch('issues', args.issueId, { lastActivityAt: now });
     }
     if (projectId) {
-      await ctx.db.patch(projectId, { lastActivityAt: now });
+      await ctx.db.patch('projects', projectId, { lastActivityAt: now });
     }
 
     return timeEntryId;
@@ -107,7 +107,7 @@ export const stopTimer = zMutation({
     const now = Date.now();
 
     if (args.timeEntryId) {
-      const entry = await ctx.db.get(args.timeEntryId);
+      const entry = await ctx.db.get('timeEntries', args.timeEntryId);
       if (!entry) {
         throw new ConvexError('Time entry not found');
       }
@@ -117,7 +117,7 @@ export const stopTimer = zMutation({
       if (entry.endedAt !== null) {
         return null;
       }
-      await ctx.db.patch(entry._id, { endedAt: now });
+      await ctx.db.patch('timeEntries', entry._id, { endedAt: now });
       return entry._id;
     }
 
@@ -126,10 +126,10 @@ export const stopTimer = zMutation({
       .withIndex('by_user_ended', (q) => q.eq('userId', viewerId).eq('endedAt', null))
       .take(1);
 
-    const entry = active[0] ?? null;
-    if (!entry) return null;
+    const entry = active.at(0) ?? null;
+    if (entry === null) return null;
 
-    await ctx.db.patch(entry._id, { endedAt: now });
+    await ctx.db.patch('timeEntries', entry._id, { endedAt: now });
     return entry._id;
   },
 });
@@ -165,4 +165,3 @@ export const listForIssueForViewer = zQuery({
     return await Promise.all(entries.map((e) => enrichTimeEntry(ctx, e)));
   },
 });
-

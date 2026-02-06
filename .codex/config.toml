@@ -6,6 +6,6 @@ args = ["shadcn@latest", "mcp"]
 command = "npx"
 args = ["convex", "mcp", "start", "--project-dir", "."]
 
-[mcp_servers.tanstack_start]
+[mcp_servers.tanstack]
 command = "npx"
 args = ["-y", "@tanstack/cli@latest", "mcp"]

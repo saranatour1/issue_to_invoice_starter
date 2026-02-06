@@ -50,7 +50,6 @@ export const listProjects = zQuery({
 export const getProject = zQuery({
   args: getProjectArgsSchema,
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.projectId);
+    return await ctx.db.get('projects', args.projectId);
   },
 });
-

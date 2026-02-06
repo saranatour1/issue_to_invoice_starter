@@ -1,8 +1,7 @@
-import { createFileRoute, redirect, useNavigate, useParams } from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
 import { convexQuery, useConvexMutation } from '@convex-dev/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import type { SubmitEvent } from 'react';
 import { useAuth } from '@workos/authkit-tanstack-react-start/client';
 import {
   RiAddLine,
@@ -23,7 +22,6 @@ import {
 } from '@remixicon/react';
 
 import { api } from '../../../convex/_generated/api';
-import type { Doc, Id } from '../../../convex/_generated/dataModel';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -34,30 +32,22 @@ import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 
-export const Route = createFileRoute('/_authenticated/$projectId/$view')({
-  loader: ({ params }) => {
-    const view = params.view;
-    if (view !== 'issues' && view !== 'time' && view !== 'invoices') {
-      throw redirect({
-        to: '/$projectId/$view',
-        params: { projectId: params.projectId, view: 'issues' },
-      });
-    }
-  },
-  component: AuthenticatedPage,
-});
+import type { SubmitEvent } from 'react';
+import type { Doc, Id } from '../../../convex/_generated/dataModel';
 
-function AuthenticatedPage() {
+export type DashboardView = 'issues' | 'time' | 'invoices';
+
+export type DashboardPageProps = {
+  projectId: string;
+  view: DashboardView;
+  issueIdParam?: string | null;
+};
+
+export function DashboardPage({ projectId, view, issueIdParam = null }: DashboardPageProps) {
   const queryClient = useQueryClient();
   const auth = useAuth();
   const navigate = useNavigate();
-  const { projectId, view } = Route.useParams();
-  const dashboardView = view as DashboardView;
-  const issueParams = useParams({
-    from: '/_authenticated/$projectId/$view/$issueId',
-    shouldThrow: false,
-  });
-  const issueIdParam = (issueParams as { issueId?: string } | undefined)?.issueId ?? null;
+  const dashboardView = view;
   const routeIssueId = issueIdParam ? (issueIdParam as Id<'issues'>) : null;
 
   const selectedIssueId = dashboardView === 'issues' ? routeIssueId : null;
@@ -195,7 +185,7 @@ function AuthenticatedPage() {
   const createProject = useMutation({
     mutationFn: (args: { name: string; description?: string; color?: string }) => createProjectFn(args),
     onSuccess: async (nextProjectId) => {
-      navigate({ to: '/$projectId/$view', params: { projectId: nextProjectId, view: 'issues' } });
+      navigate({ to: '/$projectId/issues', params: { projectId: nextProjectId } });
       await queryClient.invalidateQueries({ queryKey: ['convexQuery'] });
     },
   });
@@ -211,8 +201,8 @@ function AuthenticatedPage() {
     onSuccess: async (issueId) => {
       await queryClient.invalidateQueries({ queryKey: ['convexQuery'] });
       navigate({
-        to: '/$projectId/$view/$issueId',
-        params: { projectId, view: 'issues', issueId },
+        to: '/$projectId/issues/$issueId',
+        params: { projectId, issueId },
       });
     },
   });
@@ -276,7 +266,7 @@ function AuthenticatedPage() {
     if (!selectedIssueId) return;
     const stillVisible = filteredIssues.some((issue) => issue._id === selectedIssueId);
     if (stillVisible) return;
-    navigate({ to: '/$projectId/$view', params: { projectId, view: 'issues' }, replace: true });
+    navigate({ to: '/$projectId/issues', params: { projectId }, replace: true });
   }, [dashboardView, filteredIssues, navigate, selectedIssueId]);
 
   const selectedProject = selectedProjectId ? projectById.get(selectedProjectId) ?? null : null;
@@ -392,13 +382,13 @@ function AuthenticatedPage() {
                       onClick={() => {
                         if (issueIdParam) {
                           navigate({
-                            to: '/$projectId/$view/$issueId',
-                            params: { projectId, view: 'issues', issueId: issueIdParam },
+                            to: '/$projectId/issues/$issueId',
+                            params: { projectId, issueId: issueIdParam },
                           });
                           return;
                         }
 
-                        navigate({ to: '/$projectId/$view', params: { projectId, view: 'issues' } });
+                        navigate({ to: '/$projectId/issues', params: { projectId } });
                       }}
                     >
                       <RiHashtag className="size-4 opacity-70" />
@@ -411,13 +401,13 @@ function AuthenticatedPage() {
                       onClick={() => {
                         if (issueIdParam) {
                           navigate({
-                            to: '/$projectId/$view/$issueId',
-                            params: { projectId, view: 'time', issueId: issueIdParam },
+                            to: '/$projectId/time/$issueId',
+                            params: { projectId, issueId: issueIdParam },
                           });
                           return;
                         }
 
-                        navigate({ to: '/$projectId/$view', params: { projectId, view: 'time' } });
+                        navigate({ to: '/$projectId/time', params: { projectId } });
                       }}
                     >
                       <RiTimerLine className="size-4 opacity-70" />
@@ -427,7 +417,7 @@ function AuthenticatedPage() {
                   <SidebarMenuItem>
                     <SidebarMenuButton
                       isActive={dashboardView === 'invoices'}
-                      onClick={() => navigate({ to: '/$projectId/$view', params: { projectId, view: 'invoices' } })}
+                      onClick={() => navigate({ to: '/$projectId/invoices', params: { projectId } })}
                     >
                       <RiFileTextLine className="size-4 opacity-70" />
                       <span>Invoices</span>
@@ -508,7 +498,7 @@ function AuthenticatedPage() {
                     <SidebarMenuItem>
                     <SidebarMenuButton
                       isActive={projectId === 'all'}
-                      onClick={() => navigate({ to: '/$projectId/$view', params: { projectId: 'all', view: 'issues' } })}
+                      onClick={() => navigate({ to: '/$projectId/issues', params: { projectId: 'all' } })}
                     >
                       All issues
                     </SidebarMenuButton>
@@ -524,7 +514,7 @@ function AuthenticatedPage() {
                         <SidebarMenuButton
                           key={project._id}
                           isActive={selected}
-                          onClick={() => navigate({ to: '/$projectId/$view', params: { projectId: project._id, view: 'issues' } })}
+                          onClick={() => navigate({ to: '/$projectId/issues', params: { projectId: project._id } })}
                           className="justify-between"
                         >
                           <span className="inline-flex min-w-0 items-center gap-2">
@@ -821,12 +811,12 @@ function AuthenticatedPage() {
                           type="button"
                           onClick={() => {
                             if (selected) {
-                              navigate({ to: '/$projectId/$view', params: { projectId, view: 'issues' } });
+                              navigate({ to: '/$projectId/issues', params: { projectId } });
                               return;
                             }
                             navigate({
-                              to: '/$projectId/$view/$issueId',
-                              params: { projectId, view: 'issues', issueId: issue._id },
+                              to: '/$projectId/issues/$issueId',
+                              params: { projectId, issueId: issue._id },
                             });
                           }}
                           className={cn(
@@ -890,7 +880,7 @@ function AuthenticatedPage() {
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => navigate({ to: '/$projectId/$view', params: { projectId, view: 'issues' } })}
+                          onClick={() => navigate({ to: '/$projectId/issues', params: { projectId } })}
                           title="Close"
                         >
                           <RiCloseLine />
@@ -1042,12 +1032,12 @@ function AuthenticatedPage() {
                 <div className="flex items-center gap-3">
                   {timeIssueId ? (
                     <button
-                      type="button"
-                      className="text-[0.625rem] text-muted-foreground hover:text-foreground"
-                      onClick={() => navigate({ to: '/$projectId/$view', params: { projectId, view: 'time' } })}
-                    >
-                      Clear issue filter
-                    </button>
+	                      type="button"
+	                      className="text-[0.625rem] text-muted-foreground hover:text-foreground"
+	                      onClick={() => navigate({ to: '/$projectId/time', params: { projectId } })}
+	                    >
+	                      Clear issue filter
+	                    </button>
                   ) : null}
                   <span className="text-[0.625rem] text-muted-foreground">
                     {timeEntriesQuery.isLoading ? 'Loading…' : `${filteredTimeEntries.length} shown`}
@@ -1176,7 +1166,6 @@ function AuthenticatedPage() {
   );
 }
 
-type DashboardView = 'issues' | 'time' | 'invoices';
 type IssueStatus = 'open' | 'in_progress' | 'done' | 'closed';
 type IssueStatusFilter = IssueStatus | 'all';
 type IssuePriority = 'low' | 'medium' | 'high' | 'urgent';

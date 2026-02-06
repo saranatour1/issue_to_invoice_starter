@@ -38,7 +38,7 @@ export const markRead = zMutation({
   args: markNotificationReadArgsSchema,
   handler: async (ctx, args) => {
     const viewerId = await requireViewerId(ctx);
-    const notification = await ctx.db.get(args.notificationId);
+    const notification = await ctx.db.get('notifications', args.notificationId);
     if (!notification) {
       throw new ConvexError('Notification not found');
     }
@@ -50,8 +50,7 @@ export const markRead = zMutation({
       return null;
     }
 
-    await ctx.db.patch(args.notificationId, { readAt: Date.now() });
+    await ctx.db.patch('notifications', args.notificationId, { readAt: Date.now() });
     return null;
   },
 });
-

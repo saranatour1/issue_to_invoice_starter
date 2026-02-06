@@ -54,7 +54,7 @@ export const upsertViewer = zMutation({
     };
 
     if (existing) {
-      await ctx.db.patch(existing._id, patch);
+      await ctx.db.patch('users', existing._id, patch);
       return existing._id;
     }
 
@@ -95,4 +95,3 @@ export const listByUserIds = zQuery({
     return users.filter((u): u is NonNullable<typeof u> => u !== null);
   },
 });
-

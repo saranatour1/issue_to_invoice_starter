@@ -1,6 +1,36 @@
-"use client"
 
 import * as React from "react"
+
+import {
+  RiAddLine,
+  RiBankCardLine,
+  RiBluetoothLine,
+  RiCodeLine,
+  RiComputerLine,
+  RiDownloadLine,
+  RiEyeLine,
+  RiFileLine,
+  RiFileTextLine,
+  RiFolderLine,
+  RiFolderOpenLine,
+  RiKeyboardLine,
+  RiLayoutLine,
+  RiLogoutBoxLine,
+  RiMailLine,
+  RiMoonLine,
+  RiMore2Line,
+  RiMoreLine,
+  RiNotificationLine,
+  RiPaletteLine,
+  RiQuestionLine,
+  RiSaveLine,
+  RiSearchLine,
+  RiSettingsLine,
+  RiShieldLine,
+  RiSunLine,
+  RiTranslate,
+  RiUserLine,
+} from "@remixicon/react"
 
 import {
   Example,
@@ -65,7 +95,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { RiAddLine, RiBluetoothLine, RiMore2Line, RiFileLine, RiFolderLine, RiFolderOpenLine, RiCodeLine, RiMoreLine, RiSearchLine, RiSaveLine, RiDownloadLine, RiEyeLine, RiLayoutLine, RiPaletteLine, RiSunLine, RiMoonLine, RiComputerLine, RiUserLine, RiBankCardLine, RiSettingsLine, RiKeyboardLine, RiTranslate, RiNotificationLine, RiMailLine, RiShieldLine, RiQuestionLine, RiFileTextLine, RiLogoutBoxLine } from "@remixicon/react"
 
 export function ComponentExample() {
   return (

@@ -153,8 +153,8 @@ function LandingPage() {
               </p>
               <div className="mt-7 flex flex-wrap items-center gap-3">
                 <Link
-                  to="/$projectId/$view"
-                  params={{ projectId: 'all', view: 'issues' }}
+                  to="/$projectId/issues"
+                  params={{ projectId: 'all' }}
                   className={buttonVariants({ size: 'lg' })}
                 >
                   Sign in
@@ -318,8 +318,8 @@ function LandingPage() {
           </CardHeader>
           <CardContent className="flex flex-wrap items-center gap-3">
             <Link
-              to="/$projectId/$view"
-              params={{ projectId: 'all', view: 'issues' }}
+              to="/$projectId/issues"
+              params={{ projectId: 'all' }}
               className={buttonVariants({ size: 'lg' })}
             >
               Sign in
@@ -390,8 +390,8 @@ function Header() {
 
       <div className="flex items-center gap-2">
         <Link
-          to="/$projectId/$view"
-          params={{ projectId: 'all', view: 'issues' }}
+          to="/$projectId/issues"
+          params={{ projectId: 'all' }}
           className={buttonVariants({ variant: 'ghost' })}
         >
           Sign in

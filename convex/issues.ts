@@ -88,11 +88,11 @@ export const createIssue = zMutation({
     const now = Date.now();
 
     if (args.projectId) {
-      const project = await ctx.db.get(args.projectId);
+      const project = await ctx.db.get('projects', args.projectId);
       if (!project) {
         throw new ConvexError('Project not found');
       }
-      await ctx.db.patch(args.projectId, { lastActivityAt: now });
+      await ctx.db.patch('projects', args.projectId, { lastActivityAt: now });
     }
 
     const issueId = await ctx.db.insert('issues', {
@@ -120,7 +120,7 @@ export const listIssues = zQuery({
     const limit = args.limit ?? 50;
     const includeArchived = args.includeArchived ?? false;
 
-    let items: any[];
+    let items: Array<any>;
 
     if (args.projectId) {
       const projectId = args.projectId;
@@ -156,7 +156,7 @@ export const getIssue = zQuery({
     issueId: addIssueCommentArgsSchema.shape.issueId,
   },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.issueId);
+    return await ctx.db.get('issues', args.issueId);
   },
 });
 
@@ -167,13 +167,13 @@ export const addIssueComment = zMutation({
     const now = Date.now();
     const parentCommentId = args.parentCommentId ?? null;
 
-    const issue = await ctx.db.get(args.issueId);
+    const issue = await ctx.db.get('issues', args.issueId);
     if (!issue) {
       throw new ConvexError('Issue not found');
     }
 
     if (parentCommentId) {
-      const parent = await ctx.db.get(parentCommentId);
+      const parent = await ctx.db.get('issueComments', parentCommentId);
       if (!parent || parent.issueId !== args.issueId) {
         throw new ConvexError('Parent comment not found for this issue');
       }
@@ -188,7 +188,7 @@ export const addIssueComment = zMutation({
       deletedAt: null,
     });
 
-    await ctx.db.patch(args.issueId, { lastActivityAt: now });
+    await ctx.db.patch('issues', args.issueId, { lastActivityAt: now });
 
     // Notifications
     const recipients = new Set<string>();
@@ -198,7 +198,7 @@ export const addIssueComment = zMutation({
     }
 
     if (parentCommentId) {
-      const parent = await ctx.db.get(parentCommentId);
+      const parent = await ctx.db.get('issueComments', parentCommentId);
       if (parent && parent.authorId !== viewerId) {
         recipients.add(parent.authorId);
       }
@@ -262,12 +262,12 @@ export const setIssueStatus = zMutation({
     const viewerId = await requireViewerId(ctx);
     const now = Date.now();
 
-    const issue = await ctx.db.get(args.issueId);
+    const issue = await ctx.db.get('issues', args.issueId);
     if (!issue) {
       throw new ConvexError('Issue not found');
     }
 
-    await ctx.db.patch(args.issueId, { status: args.status, lastActivityAt: now });
+    await ctx.db.patch('issues', args.issueId, { status: args.status, lastActivityAt: now });
 
     if (issue.creatorId !== viewerId) {
       await createNotification(ctx, {
@@ -291,7 +291,7 @@ export const setIssueAssignees = zMutation({
     const viewerId = await requireViewerId(ctx);
     const now = Date.now();
 
-    const issue = await ctx.db.get(args.issueId);
+    const issue = await ctx.db.get('issues', args.issueId);
     if (!issue) {
       throw new ConvexError('Issue not found');
     }
@@ -304,11 +304,11 @@ export const setIssueAssignees = zMutation({
       ),
     );
 
-    const prevAssigneeIds = issue.assigneeIds ?? [];
+    const prevAssigneeIds = issue.assigneeIds;
     const prev = new Set(prevAssigneeIds);
     const added = nextAssigneeIds.filter((id) => !prev.has(id));
 
-    await ctx.db.patch(args.issueId, { assigneeIds: nextAssigneeIds, lastActivityAt: now });
+    await ctx.db.patch('issues', args.issueId, { assigneeIds: nextAssigneeIds, lastActivityAt: now });
 
     for (const userId of added) {
       if (userId === viewerId) continue;
@@ -334,7 +334,7 @@ export const toggleIssueReaction = zMutation({
     const commentId = args.commentId ?? null;
 
     if (commentId) {
-      const comment = await ctx.db.get(commentId);
+      const comment = await ctx.db.get('issueComments', commentId);
       if (!comment || comment.issueId !== args.issueId) {
         throw new ConvexError('Comment not found for this issue');
       }
@@ -348,7 +348,7 @@ export const toggleIssueReaction = zMutation({
       .unique();
 
     if (existing) {
-      await ctx.db.delete(existing._id);
+      await ctx.db.delete('issueReactions', existing._id);
       return { added: false };
     }
 
@@ -361,7 +361,7 @@ export const toggleIssueReaction = zMutation({
 
     // Notifications
     if (commentId) {
-      const comment = await ctx.db.get(commentId);
+      const comment = await ctx.db.get('issueComments', commentId);
       if (comment && comment.authorId !== viewerId) {
         await createNotification(ctx, {
           userId: comment.authorId,
@@ -374,7 +374,7 @@ export const toggleIssueReaction = zMutation({
         });
       }
     } else {
-      const issue = await ctx.db.get(args.issueId);
+      const issue = await ctx.db.get('issues', args.issueId);
       if (issue && issue.creatorId !== viewerId) {
         await createNotification(ctx, {
           userId: issue.creatorId,
