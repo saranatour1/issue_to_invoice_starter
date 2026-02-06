@@ -47,9 +47,8 @@ export const getActiveForViewer = zQuery({
       .withIndex('by_user_ended', (q) => q.eq('userId', viewerId).eq('endedAt', null))
       .take(1);
 
-    const entry = active.at(0) ?? null;
-    if (entry === null) return null;
-    return await enrichTimeEntry(ctx, entry);
+    if (active.length === 0) return null;
+    return await enrichTimeEntry(ctx, active[0]);
   },
 });
 
@@ -126,8 +125,8 @@ export const stopTimer = zMutation({
       .withIndex('by_user_ended', (q) => q.eq('userId', viewerId).eq('endedAt', null))
       .take(1);
 
-    const entry = active.at(0) ?? null;
-    if (entry === null) return null;
+    if (active.length === 0) return null;
+    const entry = active[0];
 
     await ctx.db.patch('timeEntries', entry._id, { endedAt: now });
     return entry._id;
