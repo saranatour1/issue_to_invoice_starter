@@ -534,17 +534,17 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                 <SidebarGroup>
                   <SidebarGroupLabel>New project</SidebarGroupLabel>
                   <SidebarGroupContent>
-                    <form onSubmit={handleCreateProject} className="flex items-center gap-2">
-                      <Input
-                        value={newProjectName}
-                        onChange={(e) => setNewProjectName(e.target.value)}
-                        placeholder="New project…"
-                        aria-label="New project name"
-                      />
-                      <Button size="icon" variant="outline" disabled={createProject.isPending}>
-                        <RiAddLine />
-                      </Button>
-                    </form>
+	                    <form onSubmit={handleCreateProject} className="flex items-center gap-2">
+	                      <Input
+	                        value={newProjectName}
+	                        onChange={(e) => setNewProjectName(e.target.value)}
+	                        placeholder="New project…"
+	                        aria-label="New project name"
+	                      />
+	                      <Button size="icon" variant="outline" disabled={createProject.isPending} type="submit">
+	                        <RiAddLine />
+	                      </Button>
+	                    </form>
                     {createProject.error ? (
                       <p className="mt-2 text-[0.625rem] text-destructive">Couldn’t create project.</p>
                     ) : null}
@@ -767,17 +767,17 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                         <SelectItem value="urgent">Urgent</SelectItem>
                       </SelectContent>
                     </Select>
-                    <Input
-                      value={newIssueEstimate}
-                      onChange={(e) => setNewIssueEstimate(e.target.value)}
-                      placeholder="Est. (min)"
-                      className="w-24"
-                      inputMode="numeric"
-                    />
-                    <Button size="icon" disabled={createIssue.isPending}>
-                      <RiAddLine />
-                    </Button>
-                  </div>
+	                    <Input
+	                      value={newIssueEstimate}
+	                      onChange={(e) => setNewIssueEstimate(e.target.value)}
+	                      placeholder="Est. (min)"
+	                      className="w-24"
+	                      inputMode="numeric"
+	                    />
+	                    <Button size="icon" disabled={createIssue.isPending} type="submit">
+	                      <RiAddLine />
+	                    </Button>
+	                  </div>
                   <Textarea
                     value={newIssueDescription}
                     onChange={(e) => setNewIssueDescription(e.target.value)}
@@ -920,17 +920,21 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                           Assign to me
                         </Button>
 
-                        <Button
-                          size="icon"
-                          variant="outline"
-                          onClick={() => startTimer.mutate({ issueId: selectedIssueId ?? undefined })}
-                          disabled={startTimer.isPending}
-                          title="Start timer"
-                        >
-                          <RiPlayLine />
-                        </Button>
-                      </div>
-                    </div>
+	                        <Button
+	                          size="sm"
+	                          variant="outline"
+	                          onClick={() => {
+	                            if (!selectedIssueId) return;
+	                            startTimer.mutate({ issueId: selectedIssueId });
+	                          }}
+	                          disabled={!selectedIssueId || startTimer.isPending}
+	                          title="Start timer"
+	                        >
+	                          <RiPlayLine />
+	                          Start timer
+	                        </Button>
+	                      </div>
+	                    </div>
 
                     {selectedIssue.data.description ? (
                       <p className="mt-3 whitespace-pre-wrap text-xs text-muted-foreground">
@@ -974,21 +978,21 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                     onReply={(commentId) => setReplyToCommentId(commentId)}
                   />
 
-                  <form onSubmit={handleAddComment} className="mt-3 grid gap-2">
+	                  <form onSubmit={handleAddComment} className="mt-3 grid gap-2">
                     <Textarea
                       value={newCommentBody}
                       onChange={(e) => setNewCommentBody(e.target.value)}
                       placeholder={replyToCommentId ? 'Write a reply…' : 'Write a comment…'}
                       className="min-h-20"
                     />
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-[0.625rem] text-muted-foreground">
-                        {replyToCommentId ? 'Replying in thread' : 'Commenting on issue'}
-                      </div>
-                      <Button size="sm" disabled={addIssueComment.isPending}>
-                        Post
-                      </Button>
-                    </div>
+	                    <div className="flex items-center justify-between gap-2">
+	                      <div className="text-[0.625rem] text-muted-foreground">
+	                        {replyToCommentId ? 'Replying in thread' : 'Commenting on issue'}
+	                      </div>
+	                      <Button size="sm" disabled={addIssueComment.isPending} type="submit">
+	                        Post
+	                      </Button>
+	                    </div>
                     {addIssueComment.error ? (
                       <p className="text-[0.625rem] text-destructive">Couldn’t post comment.</p>
                     ) : null}
@@ -1105,17 +1109,17 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                   </div>
                 </div>
 
-                <form onSubmit={handleStartGeneralTimer} className="mt-4 grid gap-2">
+	                <form onSubmit={handleStartGeneralTimer} className="mt-4 grid gap-2">
                   <p className="text-xs font-medium">Start a timer</p>
                   <Input
                     value={newTimerDescription}
                     onChange={(e) => setNewTimerDescription(e.target.value)}
                     placeholder="What are you working on?"
                   />
-                  <Button size="sm" disabled={startTimer.isPending}>
-                    <RiPlayLine className="size-4" />
-                    Start timer
-                  </Button>
+	                  <Button size="sm" disabled={startTimer.isPending} type="submit">
+	                    <RiPlayLine className="size-4" />
+	                    Start timer
+	                  </Button>
                   {startTimer.error ? (
                     <p className="text-[0.625rem] text-destructive">Couldn’t start timer.</p>
                   ) : null}
