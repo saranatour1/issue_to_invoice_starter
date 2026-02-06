@@ -29,7 +29,7 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem } from '@/components/ui/sidebar';
+import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -71,6 +71,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
   }, [projects.data]);
 
   const [issueStatusFilter, setIssueStatusFilter] = useState<IssueStatusFilter>('open');
+  const [issuesLayout, setIssuesLayout] = useState<IssuesLayout>('list');
   const [issueSearch, setIssueSearch] = useState('');
 
   const issueListArgs = useMemo(() => {
@@ -88,6 +89,22 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
     if (!q) return items;
     return items.filter((issue) => issue.title.toLowerCase().includes(q));
   }, [issueSearch, issues.data]);
+
+  const issuesByStatus = useMemo(() => {
+    const buckets: Record<IssueStatus, Array<Doc<'issues'>>> = {
+      open: [],
+      in_progress: [],
+      done: [],
+      closed: [],
+    };
+
+	    for (const issue of filteredIssues) {
+	      const status = issue.status as IssueStatus;
+	      buckets[status].push(issue);
+	    }
+
+    return buckets;
+  }, [filteredIssues]);
 
   const issueContextId =
     routeIssueId && (dashboardView === 'issues' || dashboardView === 'time') ? routeIssueId : null;
@@ -478,11 +495,12 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
               </Button>
             </div>
           </SidebarFooter>
-        </Sidebar>
-
-        <Sidebar className="w-72">
-          {dashboardView === 'issues' ? (
-            <>
+	        </Sidebar>
+	
+	        <SidebarProvider>
+	        <Sidebar className="w-72">
+	          {dashboardView === 'issues' ? (
+	            <>
               <SidebarHeader>
                 <div className="min-w-0">
                   <p className="truncate text-xs font-medium">Projects</p>
@@ -607,14 +625,17 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                 </SidebarGroup>
               </SidebarContent>
             </>
-          )}
-        </Sidebar>
-
-        <section className="flex min-w-0 flex-1 flex-col">
-          <header className="flex h-12 items-center gap-2 border-b border-border/60 px-4">
-            <div className="min-w-0">
-              <p className="truncate text-xs font-medium">
-                {dashboardView === 'issues'
+	          )}
+	        </Sidebar>
+	
+	        <section className="flex min-w-0 flex-1 flex-col">
+	          <header className="flex h-12 items-center gap-2 border-b border-border/60 px-4">
+	            <SidebarTrigger size="icon" variant="outline" title="Toggle sidebar">
+	              <RiArrowRightSLine className="size-4" />
+	            </SidebarTrigger>
+	            <div className="min-w-0">
+	              <p className="truncate text-xs font-medium">
+	                {dashboardView === 'issues'
                   ? selectedProject
                     ? selectedProject.name
                     : 'All issues'
@@ -646,24 +667,44 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                     />
                   </div>
 
-                  <Select
-                    value={issueStatusFilter}
-                    onValueChange={(value) => setIssueStatusFilter(value as IssueStatusFilter)}
-                  >
-                    <SelectTrigger size="sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="open">Open</SelectItem>
-                      <SelectItem value="in_progress">In progress</SelectItem>
-                      <SelectItem value="done">Done</SelectItem>
-                      <SelectItem value="closed">Closed</SelectItem>
-                      <Separator className="my-1" />
-                      <SelectItem value="all">All</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </>
-              ) : null}
+	                  <Select
+	                    value={issueStatusFilter}
+	                    onValueChange={(value) => setIssueStatusFilter(value as IssueStatusFilter)}
+	                  >
+	                    <SelectTrigger size="sm">
+	                      <SelectValue />
+	                    </SelectTrigger>
+	                    <SelectContent>
+	                      <SelectItem value="open">Open</SelectItem>
+	                      <SelectItem value="in_progress">In progress</SelectItem>
+	                      <SelectItem value="done">Done</SelectItem>
+	                      <SelectItem value="closed">Closed</SelectItem>
+	                      <Separator className="my-1" />
+	                      <SelectItem value="all">All</SelectItem>
+	                    </SelectContent>
+	                  </Select>
+
+	                  <div className="flex items-center gap-1">
+	                    <Button
+	                      size="sm"
+	                      variant={issuesLayout === 'list' ? 'secondary' : 'outline'}
+	                      onClick={() => setIssuesLayout('list')}
+	                    >
+	                      List
+	                    </Button>
+	                    <Button
+	                      size="sm"
+	                      variant={issuesLayout === 'board' ? 'secondary' : 'outline'}
+	                      onClick={() => {
+	                        setIssueStatusFilter('all');
+	                        setIssuesLayout('board');
+	                      }}
+	                    >
+	                      Board
+	                    </Button>
+	                  </div>
+	                </>
+	              ) : null}
 
               <DropdownMenu>
                 <DropdownMenuTrigger
@@ -799,68 +840,141 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                   <div className="p-4 text-xs text-muted-foreground">No issues yet.</div>
                 ) : null}
 
-                <ul className="divide-y divide-border/60">
-                  {filteredIssues.map((issue) => {
-                    const selected = issue._id === selectedIssueId;
-                    const projectName = issue.projectId ? (projectById.get(issue.projectId)?.name ?? 'Project') : null;
-                    const estimate = issue.estimateMinutes ? formatEstimate(issue.estimateMinutes) : null;
-                    return (
-                      <li key={issue._id}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (selected) {
-                              navigate({ to: '/$projectId/issues', params: { projectId } });
-                              return;
-                            }
-                            navigate({
-                              to: '/$projectId/issues/$issueId',
-                              params: { projectId, issueId: issue._id },
-                            });
-                          }}
-                          className={cn(
-                            'flex w-full items-start gap-3 px-4 py-3 text-left text-xs transition-colors',
-                            selected ? 'bg-muted/30' : 'hover:bg-muted/20',
-                          )}
-                        >
-                          <span className="mt-0.5 text-muted-foreground" aria-hidden>
-                            <StatusIcon status={issue.status} />
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="truncate font-medium">{issue.title}</span>
-                              <PriorityPill priority={issue.priority} />
-                            </div>
-                            <div className="mt-1 flex flex-wrap items-center gap-2 text-[0.625rem] text-muted-foreground">
-                              {projectName ? <span className="truncate">{projectName}</span> : null}
-                              <span className="tabular-nums">{timeAgo(issue.lastActivityAt, now)}</span>
-                              {estimate ? <Badge variant="outline">{estimate}</Badge> : null}
-                            </div>
-                          </div>
-
-                          <div className="mt-0.5 flex items-center gap-2">
-                            <AssigneeStack assigneeIds={issue.assigneeIds} userById={userById} />
-                            <Button
-                              size="icon-xs"
-                              variant="ghost"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                startTimer.mutate({ issueId: issue._id });
-                              }}
-                              disabled={startTimer.isPending}
-                              title="Start timer"
-                            >
-                              <RiPlayLine />
-                            </Button>
-                          </div>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            </div>
+	                {issuesLayout === 'list' ? (
+	                  <ul className="divide-y divide-border/60">
+	                    {filteredIssues.map((issue) => {
+	                      const selected = issue._id === selectedIssueId;
+	                      const projectName = issue.projectId
+	                        ? (projectById.get(issue.projectId)?.name ?? 'Project')
+	                        : null;
+	                      const estimate = issue.estimateMinutes ? formatEstimate(issue.estimateMinutes) : null;
+	                      return (
+	                        <li key={issue._id}>
+	                          <button
+	                            type="button"
+	                            onClick={() => {
+	                              if (selected) {
+	                                navigate({ to: '/$projectId/issues', params: { projectId } });
+	                                return;
+	                              }
+	                              navigate({
+	                                to: '/$projectId/issues/$issueId',
+	                                params: { projectId, issueId: issue._id },
+	                              });
+	                            }}
+	                            className={cn(
+	                              'flex w-full items-start gap-3 px-4 py-3 text-left text-xs transition-colors',
+	                              selected ? 'bg-muted/30' : 'hover:bg-muted/20',
+	                            )}
+	                          >
+	                            <span className="mt-0.5 text-muted-foreground" aria-hidden>
+	                              <StatusIcon status={issue.status} />
+	                            </span>
+	                            <div className="min-w-0 flex-1">
+	                              <div className="flex items-center gap-2">
+	                                <span className="truncate font-medium">{issue.title}</span>
+	                                <PriorityPill priority={issue.priority} />
+	                              </div>
+	                              <div className="mt-1 flex flex-wrap items-center gap-2 text-[0.625rem] text-muted-foreground">
+	                                {projectName ? <span className="truncate">{projectName}</span> : null}
+	                                <span className="tabular-nums">{timeAgo(issue.lastActivityAt, now)}</span>
+	                                {estimate ? <Badge variant="outline">{estimate}</Badge> : null}
+	                              </div>
+	                            </div>
+	
+	                            <div className="mt-0.5 flex items-center gap-2">
+	                              <AssigneeStack assigneeIds={issue.assigneeIds} userById={userById} />
+	                              <Button
+	                                size="icon-xs"
+	                                variant="ghost"
+	                                onClick={(e) => {
+	                                  e.preventDefault();
+	                                  e.stopPropagation();
+	                                  startTimer.mutate({ issueId: issue._id });
+	                                }}
+	                                disabled={startTimer.isPending}
+	                                title="Start timer"
+	                              >
+	                                <RiPlayLine />
+	                              </Button>
+	                            </div>
+	                          </button>
+	                        </li>
+	                      );
+	                    })}
+	                  </ul>
+	                ) : (
+	                  <div className="p-4">
+	                    <div className="flex gap-4 overflow-x-auto pb-4">
+	                      {(['open', 'in_progress', 'done', 'closed'] as const).map((status) => {
+	                        const items = issuesByStatus[status];
+	                        return (
+	                          <div key={status} className="w-72 shrink-0">
+	                            <div className="flex items-center justify-between">
+	                              <p className="text-[0.625rem] font-medium text-muted-foreground">
+	                                {labelForStatus(status)}
+	                              </p>
+	                              <Badge variant="outline">{items.length}</Badge>
+	                            </div>
+	                            <div className="mt-2 grid gap-2">
+	                              {items.length === 0 ? (
+	                                <div className="rounded-md border border-dashed border-border/60 bg-muted/10 px-3 py-2 text-[0.625rem] text-muted-foreground">
+	                                  No issues
+	                                </div>
+	                              ) : null}
+	                              {items.map((issue) => {
+	                                const selected = issue._id === selectedIssueId;
+	                                const projectName = issue.projectId
+	                                  ? (projectById.get(issue.projectId)?.name ?? 'Project')
+	                                  : null;
+	                                const estimate = issue.estimateMinutes ? formatEstimate(issue.estimateMinutes) : null;
+	                                return (
+	                                  <button
+	                                    key={issue._id}
+	                                    type="button"
+	                                    onClick={() => {
+	                                      if (selected) {
+	                                        navigate({ to: '/$projectId/issues', params: { projectId } });
+	                                        return;
+	                                      }
+	                                      navigate({
+	                                        to: '/$projectId/issues/$issueId',
+	                                        params: { projectId, issueId: issue._id },
+	                                      });
+	                                    }}
+	                                    className={cn(
+	                                      'w-full rounded-md border border-border/60 bg-background px-3 py-2 text-left text-xs transition-colors hover:bg-muted/20',
+	                                      selected && 'ring-1 ring-primary',
+	                                    )}
+	                                  >
+	                                    <div className="flex items-start justify-between gap-2">
+	                                      <div className="min-w-0 flex-1">
+	                                        <p className="truncate font-medium">{issue.title}</p>
+	                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[0.625rem] text-muted-foreground">
+	                                          {projectName ? <span className="truncate">{projectName}</span> : null}
+	                                          <span className="tabular-nums">
+	                                            {timeAgo(issue.lastActivityAt, now)}
+	                                          </span>
+	                                          {estimate ? <Badge variant="outline">{estimate}</Badge> : null}
+	                                        </div>
+	                                      </div>
+	                                      <PriorityPill priority={issue.priority} />
+	                                    </div>
+	                                    <div className="mt-2 flex items-center justify-between gap-2">
+	                                      <AssigneeStack assigneeIds={issue.assigneeIds} userById={userById} />
+	                                    </div>
+	                                  </button>
+	                                );
+	                              })}
+	                            </div>
+	                          </div>
+	                        );
+	                      })}
+	                    </div>
+	                  </div>
+	                )}
+	              </div>
+	            </div>
 
             <div className="min-h-0 overflow-auto">
               <div className="border-b border-border/60 p-4">
@@ -1162,18 +1276,20 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                 </div>
               </div>
             </div>
-          )}
-        </section>
-      </div>
-    </main>
-  );
-}
+	          )}
+	        </section>
+	        </SidebarProvider>
+	      </div>
+	    </main>
+	  );
+  }
 
-type IssueStatus = 'open' | 'in_progress' | 'done' | 'closed';
-type IssueStatusFilter = IssueStatus | 'all';
-type IssuePriority = 'low' | 'medium' | 'high' | 'urgent';
-type TimeViewFilter = 'all' | 'today' | 'week' | 'running';
-type MinimalUser = { name: string | null; email: string | null; pictureUrl: string | null };
+	type IssueStatus = 'open' | 'in_progress' | 'done' | 'closed';
+	type IssueStatusFilter = IssueStatus | 'all';
+	type IssuesLayout = 'list' | 'board';
+	type IssuePriority = 'low' | 'medium' | 'high' | 'urgent';
+	type TimeViewFilter = 'all' | 'today' | 'week' | 'running';
+	type MinimalUser = { name: string | null; email: string | null; pictureUrl: string | null };
 
 function StatusIcon({ status }: { status: IssueStatus }) {
   const className = 'size-4';

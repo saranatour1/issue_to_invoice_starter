@@ -3,13 +3,74 @@
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+
+type SidebarContextValue = {
+  open: boolean
+  setOpen: React.Dispatch<React.SetStateAction<boolean>>
+  toggle: () => void
+}
+
+const SidebarContext = React.createContext<SidebarContextValue | null>(null)
+
+function useSidebar() {
+  const ctx = React.useContext(SidebarContext)
+  if (!ctx) {
+    throw new Error("useSidebar must be used within <SidebarProvider>")
+  }
+  return ctx
+}
+
+function SidebarProvider({
+  defaultOpen = true,
+  children,
+}: {
+  defaultOpen?: boolean
+  children: React.ReactNode
+}) {
+  const [open, setOpen] = React.useState(defaultOpen)
+  const toggle = React.useCallback(() => setOpen((v) => !v), [])
+
+  const value = React.useMemo(
+    () => ({
+      open,
+      setOpen,
+      toggle,
+    }),
+    [open, toggle]
+  )
+
+  return (
+    <SidebarContext.Provider value={value}>{children}</SidebarContext.Provider>
+  )
+}
+
+function SidebarTrigger({
+  onClick,
+  ...props
+}: React.ComponentProps<typeof Button>) {
+  const { toggle } = useSidebar()
+  return (
+    <Button
+      type="button"
+      onClick={(event) => {
+        onClick?.(event)
+        toggle()
+      }}
+      {...props}
+    />
+  )
+}
 
 function Sidebar({ className, ...props }: React.ComponentProps<"aside">) {
+  const ctx = React.useContext(SidebarContext)
+  const open = ctx?.open ?? true
   return (
     <aside
       data-slot="sidebar"
       className={cn(
         "bg-sidebar text-sidebar-foreground flex h-dvh w-64 shrink-0 flex-col border-r border-sidebar-border/70",
+        !open && "hidden",
         className
       )}
       {...props}
@@ -128,6 +189,9 @@ function SidebarMenuButton({
 }
 
 export {
+  SidebarProvider,
+  SidebarTrigger,
+  useSidebar,
   Sidebar,
   SidebarHeader,
   SidebarContent,
@@ -139,4 +203,3 @@ export {
   SidebarMenuItem,
   SidebarMenuButton,
 }
-
