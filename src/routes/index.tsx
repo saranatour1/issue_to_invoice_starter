@@ -1,5 +1,4 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
-import type { ComponentType } from 'react';
+import { Link, createFileRoute } from '@tanstack/react-router';
 import {
   RiBankCardLine,
   RiDatabase2Line,
@@ -14,6 +13,7 @@ import {
   RiShieldLine,
   RiTailwindCssLine,
 } from '@remixicon/react';
+import type { ComponentType } from 'react';
 
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
@@ -40,7 +40,7 @@ type Feature = {
   icon: ComponentType<{ className?: string }>;
 };
 
-const features: Feature[] = [
+const features: Array<Feature> = [
   {
     title: 'One inbox for all requests',
     description:
@@ -86,7 +86,7 @@ type Technology = {
   icon: ComponentType<{ className?: string }>;
 };
 
-const technologies: Technology[] = [
+const technologies: Array<Technology> = [
   {
     name: 'Convex',
     description: 'Backend for realtime data, queries, and server logic—built for product teams.',

@@ -22,6 +22,8 @@ import {
 } from '@remixicon/react';
 
 import { api } from '../../../convex/_generated/api';
+import type { Doc, Id } from '../../../convex/_generated/dataModel';
+import type { SubmitEvent } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -31,9 +33,6 @@ import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupConte
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-
-import type { SubmitEvent } from 'react';
-import type { Doc, Id } from '../../../convex/_generated/dataModel';
 
 export type DashboardView = 'issues' | 'time' | 'invoices';
 
@@ -134,13 +133,13 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 
     for (const issue of filteredIssues) {
       ids.add(issue.creatorId);
-      for (const assigneeId of issue.assigneeIds ?? []) ids.add(assigneeId);
+      for (const assigneeId of issue.assigneeIds) ids.add(assigneeId);
     }
 
     const issue = selectedIssue.data;
     if (issue) {
       ids.add(issue.creatorId);
-      for (const assigneeId of issue.assigneeIds ?? []) ids.add(assigneeId);
+      for (const assigneeId of issue.assigneeIds) ids.add(assigneeId);
     }
 
     for (const comment of selectedIssueComments.data ?? []) {
@@ -215,7 +214,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
   });
 
   const setIssueAssignees = useMutation({
-    mutationFn: (args: { issueId: Id<'issues'>; assigneeIds: string[] }) => setIssueAssigneesFn(args),
+    mutationFn: (args: { issueId: Id<'issues'>; assigneeIds: Array<string> }) => setIssueAssigneesFn(args),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['convexQuery'] });
     },
@@ -327,7 +326,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
   const signedInMinimalUser: MinimalUser | null = signedInUser
     ? {
         name: signedInName || null,
-        email: signedInUser.email ?? null,
+        email: signedInUser.email,
         pictureUrl: signedInUser.profilePictureUrl ?? null,
       }
     : null;
@@ -834,13 +833,13 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                             </div>
                             <div className="mt-1 flex flex-wrap items-center gap-2 text-[0.625rem] text-muted-foreground">
                               {projectName ? <span className="truncate">{projectName}</span> : null}
-                              <span className="tabular-nums">{timeAgo(issue.lastActivityAt, now ?? Date.now())}</span>
+                              <span className="tabular-nums">{timeAgo(issue.lastActivityAt, now)}</span>
                               {estimate ? <Badge variant="outline">{estimate}</Badge> : null}
                             </div>
                           </div>
 
                           <div className="mt-0.5 flex items-center gap-2">
-                            <AssigneeStack assigneeIds={issue.assigneeIds ?? []} userById={userById} />
+                            <AssigneeStack assigneeIds={issue.assigneeIds} userById={userById} />
                             <Button
                               size="icon-xs"
                               variant="ghost"
@@ -910,7 +909,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                             if (!selectedIssueId || !viewerId) return;
                             const issue = selectedIssue.data;
                             if (!issue) return;
-                            const prev = issue.assigneeIds ?? [];
+                            const prev = issue.assigneeIds;
                             const next = prev.includes(viewerId)
                               ? prev.filter((id) => id !== viewerId)
                               : [...prev, viewerId];
@@ -944,7 +943,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                       {selectedIssue.data.estimateMinutes ? (
                         <Badge variant="outline">{formatEstimate(selectedIssue.data.estimateMinutes)}</Badge>
                       ) : null}
-                      <AssigneeStack assigneeIds={selectedIssue.data.assigneeIds ?? []} userById={userById} />
+                      <AssigneeStack assigneeIds={selectedIssue.data.assigneeIds} userById={userById} />
                     </div>
                   </>
                 ) : (
@@ -1338,7 +1337,7 @@ function AssigneeStack({
   assigneeIds,
   userById,
 }: {
-  assigneeIds: string[];
+  assigneeIds: Array<string>;
   userById: Map<string, { name: string | null; email: string | null; pictureUrl: string | null }>;
 }) {
   if (!assigneeIds.length) {

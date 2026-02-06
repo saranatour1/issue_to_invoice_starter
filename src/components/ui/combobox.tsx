@@ -1,5 +1,6 @@
 import * as React from "react"
 import { Combobox as ComboboxPrimitive } from "@base-ui/react"
+import { RiArrowDownSLine, RiCheckLine, RiCloseLine } from "@remixicon/react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -9,7 +10,6 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group"
-import { RiArrowDownSLine, RiCloseLine, RiCheckLine } from "@remixicon/react"
 
 const Combobox = ComboboxPrimitive.Root
 
