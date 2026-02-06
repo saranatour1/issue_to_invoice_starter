@@ -26,7 +26,15 @@ import type { Doc, Id } from '../../../convex/_generated/dataModel';
 import type { SubmitEvent } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
@@ -720,36 +728,38 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                   }
                 />
                 <DropdownMenuContent align="end" className="w-[22rem]">
-                  <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-                  <Separator className="my-1" />
-                  {(latestNotifications.data ?? []).length === 0 ? (
-                    <div className="px-2 py-2 text-xs text-muted-foreground">No notifications yet.</div>
-                  ) : null}
-                  {(latestNotifications.data ?? []).map((n) => {
-                    const actor = n.actorId ? userById.get(n.actorId) ?? null : null;
-                    const isUnread = n.readAt === null;
-                    return (
-                      <DropdownMenuItem
-                        key={n._id}
-                        onClick={() => {
-                          if (!isUnread) return;
-                          markNotificationRead.mutate({ notificationId: n._id });
-                        }}
-                        className={cn('flex items-start gap-2', isUnread && 'bg-muted/30')}
-                      >
-                        <UserAvatar userId={n.actorId} user={actor} />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2">
-                            <span className="truncate text-xs font-medium">{n.title}</span>
-                            {isUnread ? <Badge variant="secondary">New</Badge> : null}
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {(latestNotifications.data ?? []).length === 0 ? (
+                      <div className="px-2 py-2 text-xs text-muted-foreground">No notifications yet.</div>
+                    ) : null}
+                    {(latestNotifications.data ?? []).map((n) => {
+                      const actor = n.actorId ? userById.get(n.actorId) ?? null : null;
+                      const isUnread = n.readAt === null;
+                      return (
+                        <DropdownMenuItem
+                          key={n._id}
+                          onClick={() => {
+                            if (!isUnread) return;
+                            markNotificationRead.mutate({ notificationId: n._id });
+                          }}
+                          className={cn('flex items-start gap-2', isUnread && 'bg-muted/30')}
+                        >
+                          <UserAvatar userId={n.actorId} user={actor} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="truncate text-xs font-medium">{n.title}</span>
+                              {isUnread ? <Badge variant="secondary">New</Badge> : null}
+                            </div>
+                            {n.body ? (
+                              <p className="mt-0.5 line-clamp-2 text-[0.625rem] text-muted-foreground">{n.body}</p>
+                            ) : null}
                           </div>
-                          {n.body ? (
-                            <p className="mt-0.5 line-clamp-2 text-[0.625rem] text-muted-foreground">{n.body}</p>
-                          ) : null}
-                        </div>
-                      </DropdownMenuItem>
-                    );
-                  })}
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuGroup>
                 </DropdownMenuContent>
               </DropdownMenu>
 
