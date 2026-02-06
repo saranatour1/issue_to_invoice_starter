@@ -1,0 +1,7 @@
+[mcp_servers.shadcn]
+command = "npx"
+args = ["shadcn@latest", "mcp"]
+
+[mcp_servers.convex]
+command = "npx"
+args = ["convex", "mcp", "start", "--project-dir", "."]
