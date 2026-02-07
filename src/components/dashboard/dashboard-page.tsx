@@ -1076,19 +1076,28 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 	                        ? (projectById.get(issue.projectId)?.name ?? 'Project')
 	                        : null;
 	                      const estimate = issue.estimateMinutes ? formatEstimate(issue.estimateMinutes) : null;
+	                      const handleOpenIssue = () => {
+	                        if (selected) {
+	                          navigate({ to: '/$projectId/issues', params: { projectId } });
+	                          return;
+	                        }
+	                        navigate({
+	                          to: '/$projectId/issues/$issueId',
+	                          params: { projectId, issueId: issue._id },
+	                        });
+	                      };
 	                      return (
 	                        <li key={issue._id}>
-	                          <button
-	                            type="button"
-	                            onClick={() => {
-	                              if (selected) {
-	                                navigate({ to: '/$projectId/issues', params: { projectId } });
-	                                return;
+	                          <div
+	                            role="button"
+	                            tabIndex={0}
+	                            aria-current={selected ? 'true' : undefined}
+	                            onClick={handleOpenIssue}
+	                            onKeyDown={(event) => {
+	                              if (event.key === 'Enter' || event.key === ' ') {
+	                                event.preventDefault();
+	                                handleOpenIssue();
 	                              }
-	                              navigate({
-	                                to: '/$projectId/issues/$issueId',
-	                                params: { projectId, issueId: issue._id },
-	                              });
 	                            }}
 	                            className={cn(
 	                              'flex w-full items-start gap-3 px-4 py-3 text-left text-xs transition-colors',
@@ -1145,7 +1154,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 	                                <RiPlayLine />
 	                              </Button>
 	                            </div>
-	                          </button>
+	                          </div>
 	                        </li>
 	                      );
 	                    })}
@@ -1175,19 +1184,28 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 	                                  ? (projectById.get(issue.projectId)?.name ?? 'Project')
 	                                  : null;
 	                                const estimate = issue.estimateMinutes ? formatEstimate(issue.estimateMinutes) : null;
+	                                const handleOpenIssue = () => {
+	                                  if (selected) {
+	                                    navigate({ to: '/$projectId/issues', params: { projectId } });
+	                                    return;
+	                                  }
+	                                  navigate({
+	                                    to: '/$projectId/issues/$issueId',
+	                                    params: { projectId, issueId: issue._id },
+	                                  });
+	                                };
 	                                return (
-	                                  <button
+	                                  <div
 	                                    key={issue._id}
-	                                    type="button"
-	                                    onClick={() => {
-	                                      if (selected) {
-	                                        navigate({ to: '/$projectId/issues', params: { projectId } });
-	                                        return;
+	                                    role="button"
+	                                    tabIndex={0}
+	                                    aria-current={selected ? 'true' : undefined}
+	                                    onClick={handleOpenIssue}
+	                                    onKeyDown={(event) => {
+	                                      if (event.key === 'Enter' || event.key === ' ') {
+	                                        event.preventDefault();
+	                                        handleOpenIssue();
 	                                      }
-	                                      navigate({
-	                                        to: '/$projectId/issues/$issueId',
-	                                        params: { projectId, issueId: issue._id },
-	                                      });
 	                                    }}
 	                                    className={cn(
 	                                      'w-full rounded-md border border-border/60 bg-background px-3 py-2 text-left text-xs transition-colors hover:bg-muted/20',
@@ -1233,7 +1251,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 	                                    <div className="mt-2 flex items-center justify-between gap-2">
 	                                      <AssigneeStack assigneeIds={issue.assigneeIds} userById={userById} />
 	                                    </div>
-	                                  </button>
+	                                  </div>
 	                                );
 	                              })}
 	                            </div>
@@ -1497,16 +1515,26 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 	                            <p className="text-xs text-muted-foreground">Not blocked.</p>
 	                          ) : null}
 	                          {(blockedByIssues.data ?? []).map((blocker) => (
-	                            <button
+	                            <div
 	                              key={blocker._id}
-	                              type="button"
+	                              role="button"
+	                              tabIndex={0}
 	                              className="flex w-full items-center justify-between gap-2 rounded-md border border-border/60 bg-background px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted/20"
-	                              onClick={() =>
+	                              onClick={() => {
 	                                navigate({
 	                                  to: '/$projectId/issues/$issueId',
 	                                  params: { projectId, issueId: blocker._id },
-	                                })
-	                              }
+	                                });
+	                              }}
+	                              onKeyDown={(event) => {
+	                                if (event.key === 'Enter' || event.key === ' ') {
+	                                  event.preventDefault();
+	                                  navigate({
+	                                    to: '/$projectId/issues/$issueId',
+	                                    params: { projectId, issueId: blocker._id },
+	                                  });
+	                                }
+	                              }}
 	                            >
 	                              <span className="min-w-0 inline-flex items-center gap-2">
 	                                <span className="text-muted-foreground" aria-hidden>
@@ -1530,10 +1558,10 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 	                                }}
 	                                disabled={toggleIssueLink.isPending}
 	                                title="Remove"
-	                              >
-	                                <RiCloseLine />
-	                              </Button>
-	                            </button>
+	                                >
+	                                  <RiCloseLine />
+	                                </Button>
+	                            </div>
 	                          ))}
 	                        </div>
 	                      </div>
@@ -1574,16 +1602,26 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 	                            <p className="text-xs text-muted-foreground">No related issues.</p>
 	                          ) : null}
 	                          {(relatedIssues.data ?? []).map((related) => (
-	                            <button
+	                            <div
 	                              key={related._id}
-	                              type="button"
+	                              role="button"
+	                              tabIndex={0}
 	                              className="flex w-full items-center justify-between gap-2 rounded-md border border-border/60 bg-background px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted/20"
-	                              onClick={() =>
+	                              onClick={() => {
 	                                navigate({
 	                                  to: '/$projectId/issues/$issueId',
 	                                  params: { projectId, issueId: related._id },
-	                                })
-	                              }
+	                                });
+	                              }}
+	                              onKeyDown={(event) => {
+	                                if (event.key === 'Enter' || event.key === ' ') {
+	                                  event.preventDefault();
+	                                  navigate({
+	                                    to: '/$projectId/issues/$issueId',
+	                                    params: { projectId, issueId: related._id },
+	                                  });
+	                                }
+	                              }}
 	                            >
 	                              <span className="min-w-0 inline-flex items-center gap-2">
 	                                <span className="text-muted-foreground" aria-hidden>
@@ -1607,10 +1645,10 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 	                                }}
 	                                disabled={toggleIssueLink.isPending}
 	                                title="Remove"
-	                              >
-	                                <RiCloseLine />
-	                              </Button>
-	                            </button>
+	                                >
+	                                  <RiCloseLine />
+	                                </Button>
+	                            </div>
 	                          ))}
 	                        </div>
 	                      </div>

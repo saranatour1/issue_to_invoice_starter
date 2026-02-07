@@ -34,7 +34,7 @@ export function getRouter() {
     defaultErrorComponent: (err) => <p>{err.error.stack}</p>,
     defaultNotFoundComponent: () => <p>not found</p>,
     context: { queryClient, convexClient: convex, convexQueryClient },
-    Wrap: ({ children }) => (
+    InnerWrap: ({ children }) => (
       <AuthKitProvider>
         <ConvexProviderWithAuth client={convexQueryClient.convexClient} useAuth={useAuthFromWorkOS}>
           {children}
