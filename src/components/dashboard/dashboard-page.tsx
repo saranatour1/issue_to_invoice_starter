@@ -18,6 +18,7 @@ import {
   RiNotification3Line,
   RiPlayLine,
   RiSearchLine,
+  RiSettings3Line,
   RiStarFill,
   RiStarLine,
   RiStopLine,
@@ -43,9 +44,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
+import { SettingsPanel } from '@/components/dashboard/settings-panel';
 import { cn } from '@/lib/utils';
 
-export type DashboardView = 'issues' | 'time' | 'invoices';
+export type DashboardView = 'issues' | 'time' | 'invoices' | 'settings';
 
 export type DashboardPageProps = {
   projectId: string;
@@ -71,6 +73,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
   }, [upsertViewerFn]);
 
   const viewer = useQuery(convexQuery(api.users.getViewer, {}));
+  const viewerSettings = useQuery(convexQuery(api.users.getViewerSettings, {}));
 
   const projects = useQuery(convexQuery(api.projects.listProjects, {}));
   const projectById = useMemo(() => {
@@ -85,6 +88,15 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
   const [issuesLayout, setIssuesLayout] = useState<IssuesLayout>('list');
   const [issueSearch, setIssueSearch] = useState('');
   const [issueFavoritesOnly, setIssueFavoritesOnly] = useState(false);
+  const [issuePreferencesInitialized, setIssuePreferencesInitialized] = useState(false);
+
+  useEffect(() => {
+    if (issuePreferencesInitialized || !viewerSettings.data) return;
+    setIssueStatusFilter(viewerSettings.data.issueStatusFilterPreference as IssueStatusFilter);
+    setIssuesLayout(viewerSettings.data.issueLayoutPreference as IssuesLayout);
+    setIssueFavoritesOnly(!!viewerSettings.data.issueFavoritesOnlyPreference);
+    setIssuePreferencesInitialized(true);
+  }, [issuePreferencesInitialized, viewerSettings.data]);
 
   const issueListArgs = useMemo(() => {
     const args: { projectId?: Id<'projects'>; status?: IssueStatus; limit: number } = { limit: 50 };
@@ -590,6 +602,15 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                       <span className="ml-auto text-[0.625rem] text-muted-foreground">Soon</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={dashboardView === 'settings'}
+                      onClick={() => navigate({ to: '/$projectId/settings', params: { projectId } })}
+                    >
+                      <RiSettings3Line className="size-4 opacity-70" />
+                      <span>Settings</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
@@ -620,6 +641,23 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                   <RiStopLine className="size-4" />
                   Stop timer
                 </Button>
+              </SidebarGroupContent>
+            </SidebarGroup>
+
+            <SidebarGroup>
+              <SidebarGroupLabel>Updates</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton onClick={() => navigate({ to: '/progress' })}>
+                      <RiFileTextLine className="size-4 opacity-70" />
+                      <span>Progress log</span>
+                      <Badge variant="secondary" className="ml-auto">
+                        Public
+                      </Badge>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
@@ -777,8 +815,8 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 	                </SidebarGroup>
 	              </SidebarContent>
             </>
-          ) : dashboardView === 'time' ? (
-            <>
+	          ) : dashboardView === 'time' ? (
+	            <>
               <SidebarHeader>
                 <div className="min-w-0">
                   <p className="truncate text-xs font-medium">Time tracking</p>
@@ -809,11 +847,40 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                       {activeTimer.data ? <Badge variant="secondary">1</Badge> : null}
                     </SidebarMenuButton>
                   </SidebarGroupContent>
-                </SidebarGroup>
-              </SidebarContent>
-            </>
-          ) : (
-            <>
+	                </SidebarGroup>
+	              </SidebarContent>
+	            </>
+	          ) : dashboardView === 'settings' ? (
+	            <>
+	              <SidebarHeader>
+	                <div className="min-w-0">
+	                  <p className="truncate text-xs font-medium">Settings</p>
+	                  <p className="truncate text-[0.625rem] text-muted-foreground">Preferences and project people</p>
+	                </div>
+	              </SidebarHeader>
+
+	              <SidebarContent>
+	                <SidebarGroup>
+	                  <SidebarGroupLabel>Sections</SidebarGroupLabel>
+	                  <SidebarGroupContent>
+	                    <SidebarMenuButton onClick={() => document.getElementById('profile-settings')?.scrollIntoView({ behavior: 'smooth' })}>
+	                      Profile settings
+	                    </SidebarMenuButton>
+	                    <SidebarMenuButton onClick={() => document.getElementById('issue-display-settings')?.scrollIntoView({ behavior: 'smooth' })}>
+	                      Issue defaults
+	                    </SidebarMenuButton>
+	                    <SidebarMenuButton onClick={() => document.getElementById('project-members-settings')?.scrollIntoView({ behavior: 'smooth' })}>
+	                      Project people
+	                    </SidebarMenuButton>
+	                    <SidebarMenuButton onClick={() => document.getElementById('progress-log-settings')?.scrollIntoView({ behavior: 'smooth' })}>
+	                      Product progress
+	                    </SidebarMenuButton>
+	                  </SidebarGroupContent>
+	                </SidebarGroup>
+	              </SidebarContent>
+	            </>
+		          ) : (
+	            <>
               <SidebarHeader>
                 <div className="min-w-0">
                   <p className="truncate text-xs font-medium">Invoices</p>
@@ -840,24 +907,28 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 		            <SidebarTrigger size="icon" variant="outline" title="Toggle sidebar" />
 		            <div className="min-w-0">
 		              <p className="truncate text-xs font-medium">
+		                {dashboardView === 'issues'
+	                  ? selectedProject
+	                    ? selectedProject.name
+	                    : 'All issues'
+	                  : dashboardView === 'time'
+	                    ? 'Time tracking'
+	                    : dashboardView === 'settings'
+	                      ? 'Settings'
+	                      : 'Invoices'}
+	              </p>
+	              <p className="truncate text-[0.625rem] text-muted-foreground">
 	                {dashboardView === 'issues'
-                  ? selectedProject
-                    ? selectedProject.name
-                    : 'All issues'
-                  : dashboardView === 'time'
-                    ? 'Time tracking'
-                    : 'Invoices'}
-              </p>
-              <p className="truncate text-[0.625rem] text-muted-foreground">
-                {dashboardView === 'issues'
-                  ? issueStatusFilter === 'all'
-                    ? 'All statuses'
-                    : labelForStatus(issueStatusFilter)
-                  : dashboardView === 'time'
-                    ? labelForTimeViewFilter(timeViewFilter)
-                    : 'Coming soon'}
-              </p>
-            </div>
+	                  ? issueStatusFilter === 'all'
+	                    ? 'All statuses'
+	                    : labelForStatus(issueStatusFilter)
+	                  : dashboardView === 'time'
+	                    ? labelForTimeViewFilter(timeViewFilter)
+	                    : dashboardView === 'settings'
+	                      ? 'Manage profile, view defaults, and project members'
+	                      : 'Coming soon'}
+	              </p>
+	            </div>
 
             <div className="ml-auto flex items-center gap-2">
               {dashboardView === 'issues' ? (
@@ -900,15 +971,15 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 		                        return next;
 		                      });
 		                    }}
-		                    title={issueFavoritesOnly ? 'Showing favorites' : 'Show favorites'}
-		                  >
-		                    {issueFavoritesOnly ? (
-		                      <RiStarFill className="size-4 text-amber-500" />
-		                    ) : (
-		                      <RiStarLine className="size-4" />
-		                    )}
-		                    <span className="hidden lg:inline">Favorites</span>
-		                  </Button>
+			                    title={issueFavoritesOnly ? 'Showing favorites' : 'Show favorites'}
+			                  >
+			                    {issueFavoritesOnly ? (
+			                      <RiStarFill className="size-4 text-amber-500" />
+			                    ) : (
+			                      <RiStarLine className="size-4" />
+			                    )}
+			                    <span className="hidden lg:inline">Favorites</span>
+			                  </Button>
 
 		                  <div className="flex items-center gap-1">
 		                    <Button
@@ -1828,9 +1899,11 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                 </form>
               </div>
             </div>
-          ) : (
-            <div className="min-h-0 flex-1 overflow-auto p-6">
-              <div className="max-w-2xl">
+	          ) : dashboardView === 'settings' ? (
+	            <SettingsPanel projectId={projectId} />
+	          ) : (
+	            <div className="min-h-0 flex-1 overflow-auto p-6">
+	              <div className="max-w-2xl">
                 <p className="text-sm font-semibold">Invoices</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Coming soon. Tie issues + tracked time to clients, generate invoice drafts, and email them.

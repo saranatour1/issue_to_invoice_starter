@@ -9,16 +9,23 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ProgressRouteImport } from './routes/progress'
 import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedProjectIdRouteImport } from './routes/_authenticated/$projectId'
 import { Route as AuthenticatedProjectIdTimeRouteImport } from './routes/_authenticated/$projectId.time'
+import { Route as AuthenticatedProjectIdSettingsRouteImport } from './routes/_authenticated/$projectId.settings'
 import { Route as AuthenticatedProjectIdIssuesRouteImport } from './routes/_authenticated/$projectId.issues'
 import { Route as AuthenticatedProjectIdInvoicesRouteImport } from './routes/_authenticated/$projectId.invoices'
 import { Route as AuthenticatedProjectIdTimeIssueIdRouteImport } from './routes/_authenticated/$projectId.time.$issueId'
 import { Route as AuthenticatedProjectIdIssuesIssueIdRouteImport } from './routes/_authenticated/$projectId.issues.$issueId'
 
+const ProgressRoute = ProgressRouteImport.update({
+  id: '/progress',
+  path: '/progress',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CallbackRoute = CallbackRouteImport.update({
   id: '/callback',
   path: '/callback',
@@ -42,6 +49,12 @@ const AuthenticatedProjectIdTimeRoute =
   AuthenticatedProjectIdTimeRouteImport.update({
     id: '/time',
     path: '/time',
+    getParentRoute: () => AuthenticatedProjectIdRoute,
+  } as any)
+const AuthenticatedProjectIdSettingsRoute =
+  AuthenticatedProjectIdSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
     getParentRoute: () => AuthenticatedProjectIdRoute,
   } as any)
 const AuthenticatedProjectIdIssuesRoute =
@@ -72,9 +85,11 @@ const AuthenticatedProjectIdIssuesIssueIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/callback': typeof CallbackRoute
+  '/progress': typeof ProgressRoute
   '/$projectId': typeof AuthenticatedProjectIdRouteWithChildren
   '/$projectId/invoices': typeof AuthenticatedProjectIdInvoicesRoute
   '/$projectId/issues': typeof AuthenticatedProjectIdIssuesRouteWithChildren
+  '/$projectId/settings': typeof AuthenticatedProjectIdSettingsRoute
   '/$projectId/time': typeof AuthenticatedProjectIdTimeRouteWithChildren
   '/$projectId/issues/$issueId': typeof AuthenticatedProjectIdIssuesIssueIdRoute
   '/$projectId/time/$issueId': typeof AuthenticatedProjectIdTimeIssueIdRoute
@@ -82,9 +97,11 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/callback': typeof CallbackRoute
+  '/progress': typeof ProgressRoute
   '/$projectId': typeof AuthenticatedProjectIdRouteWithChildren
   '/$projectId/invoices': typeof AuthenticatedProjectIdInvoicesRoute
   '/$projectId/issues': typeof AuthenticatedProjectIdIssuesRouteWithChildren
+  '/$projectId/settings': typeof AuthenticatedProjectIdSettingsRoute
   '/$projectId/time': typeof AuthenticatedProjectIdTimeRouteWithChildren
   '/$projectId/issues/$issueId': typeof AuthenticatedProjectIdIssuesIssueIdRoute
   '/$projectId/time/$issueId': typeof AuthenticatedProjectIdTimeIssueIdRoute
@@ -94,9 +111,11 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/callback': typeof CallbackRoute
+  '/progress': typeof ProgressRoute
   '/_authenticated/$projectId': typeof AuthenticatedProjectIdRouteWithChildren
   '/_authenticated/$projectId/invoices': typeof AuthenticatedProjectIdInvoicesRoute
   '/_authenticated/$projectId/issues': typeof AuthenticatedProjectIdIssuesRouteWithChildren
+  '/_authenticated/$projectId/settings': typeof AuthenticatedProjectIdSettingsRoute
   '/_authenticated/$projectId/time': typeof AuthenticatedProjectIdTimeRouteWithChildren
   '/_authenticated/$projectId/issues/$issueId': typeof AuthenticatedProjectIdIssuesIssueIdRoute
   '/_authenticated/$projectId/time/$issueId': typeof AuthenticatedProjectIdTimeIssueIdRoute
@@ -106,9 +125,11 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/callback'
+    | '/progress'
     | '/$projectId'
     | '/$projectId/invoices'
     | '/$projectId/issues'
+    | '/$projectId/settings'
     | '/$projectId/time'
     | '/$projectId/issues/$issueId'
     | '/$projectId/time/$issueId'
@@ -116,9 +137,11 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/callback'
+    | '/progress'
     | '/$projectId'
     | '/$projectId/invoices'
     | '/$projectId/issues'
+    | '/$projectId/settings'
     | '/$projectId/time'
     | '/$projectId/issues/$issueId'
     | '/$projectId/time/$issueId'
@@ -127,9 +150,11 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/callback'
+    | '/progress'
     | '/_authenticated/$projectId'
     | '/_authenticated/$projectId/invoices'
     | '/_authenticated/$projectId/issues'
+    | '/_authenticated/$projectId/settings'
     | '/_authenticated/$projectId/time'
     | '/_authenticated/$projectId/issues/$issueId'
     | '/_authenticated/$projectId/time/$issueId'
@@ -139,10 +164,18 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   CallbackRoute: typeof CallbackRoute
+  ProgressRoute: typeof ProgressRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/progress': {
+      id: '/progress'
+      path: '/progress'
+      fullPath: '/progress'
+      preLoaderRoute: typeof ProgressRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/callback': {
       id: '/callback'
       path: '/callback'
@@ -176,6 +209,13 @@ declare module '@tanstack/react-router' {
       path: '/time'
       fullPath: '/$projectId/time'
       preLoaderRoute: typeof AuthenticatedProjectIdTimeRouteImport
+      parentRoute: typeof AuthenticatedProjectIdRoute
+    }
+    '/_authenticated/$projectId/settings': {
+      id: '/_authenticated/$projectId/settings'
+      path: '/settings'
+      fullPath: '/$projectId/settings'
+      preLoaderRoute: typeof AuthenticatedProjectIdSettingsRouteImport
       parentRoute: typeof AuthenticatedProjectIdRoute
     }
     '/_authenticated/$projectId/issues': {
@@ -242,6 +282,7 @@ const AuthenticatedProjectIdTimeRouteWithChildren =
 interface AuthenticatedProjectIdRouteChildren {
   AuthenticatedProjectIdInvoicesRoute: typeof AuthenticatedProjectIdInvoicesRoute
   AuthenticatedProjectIdIssuesRoute: typeof AuthenticatedProjectIdIssuesRouteWithChildren
+  AuthenticatedProjectIdSettingsRoute: typeof AuthenticatedProjectIdSettingsRoute
   AuthenticatedProjectIdTimeRoute: typeof AuthenticatedProjectIdTimeRouteWithChildren
 }
 
@@ -250,6 +291,7 @@ const AuthenticatedProjectIdRouteChildren: AuthenticatedProjectIdRouteChildren =
     AuthenticatedProjectIdInvoicesRoute: AuthenticatedProjectIdInvoicesRoute,
     AuthenticatedProjectIdIssuesRoute:
       AuthenticatedProjectIdIssuesRouteWithChildren,
+    AuthenticatedProjectIdSettingsRoute: AuthenticatedProjectIdSettingsRoute,
     AuthenticatedProjectIdTimeRoute:
       AuthenticatedProjectIdTimeRouteWithChildren,
   }
@@ -275,6 +317,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   CallbackRoute: CallbackRoute,
+  ProgressRoute: ProgressRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

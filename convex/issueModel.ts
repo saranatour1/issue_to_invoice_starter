@@ -13,6 +13,15 @@ export type IssuePriority = z.infer<typeof IssuePrioritySchema>;
 export const IssueLinkTypeSchema = z.enum(['blocked_by', 'related']);
 export type IssueLinkType = z.infer<typeof IssueLinkTypeSchema>;
 
+export const DashboardViewPreferenceSchema = z.enum(['issues', 'time', 'invoices', 'settings']);
+export type DashboardViewPreference = z.infer<typeof DashboardViewPreferenceSchema>;
+
+export const IssueLayoutPreferenceSchema = z.enum(['list', 'board']);
+export type IssueLayoutPreference = z.infer<typeof IssueLayoutPreferenceSchema>;
+
+export const IssueStatusFilterPreferenceSchema = z.enum(['all', 'open', 'in_progress', 'done', 'closed']);
+export type IssueStatusFilterPreference = z.infer<typeof IssueStatusFilterPreferenceSchema>;
+
 export const NotificationTypeSchema = z.enum([
   'issue_created',
   'issue_status_changed',
@@ -100,6 +109,14 @@ export const userTableFields = {
   name: z.string().max(200).nullable(),
   email: z.string().max(320).nullable(),
   pictureUrl: z.string().max(2048).nullable(),
+
+  preferredName: z.string().max(200).nullable().optional(),
+  timezone: z.string().max(100).nullable().optional(),
+  weeklyDigestEnabled: z.boolean().optional(),
+  defaultDashboardView: DashboardViewPreferenceSchema.optional(),
+  issueLayoutPreference: IssueLayoutPreferenceSchema.optional(),
+  issueStatusFilterPreference: IssueStatusFilterPreferenceSchema.optional(),
+  issueFavoritesOnlyPreference: z.boolean().optional(),
 
   lastSeenAt: z.number().int(),
 };
@@ -208,6 +225,26 @@ export const listProjectsArgsSchema = z.object({
 
 export const getProjectArgsSchema = z.object({
   projectId: ProjectIdSchema,
+});
+
+export const addProjectMemberArgsSchema = z.object({
+  projectId: ProjectIdSchema,
+  identifier: z.string().min(1).max(320),
+});
+
+export const removeProjectMemberArgsSchema = z.object({
+  projectId: ProjectIdSchema,
+  userId: z.string().min(1).max(256),
+});
+
+export const updateViewerSettingsArgsSchema = z.object({
+  preferredName: z.string().max(200).nullable().optional(),
+  timezone: z.string().max(100).nullable().optional(),
+  weeklyDigestEnabled: z.boolean().optional(),
+  defaultDashboardView: DashboardViewPreferenceSchema.optional(),
+  issueLayoutPreference: IssueLayoutPreferenceSchema.optional(),
+  issueStatusFilterPreference: IssueStatusFilterPreferenceSchema.optional(),
+  issueFavoritesOnlyPreference: z.boolean().optional(),
 });
 
 export const startTimerArgsSchema = z.object({

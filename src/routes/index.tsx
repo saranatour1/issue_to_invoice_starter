@@ -417,6 +417,9 @@ function LandingPage() {
             <a href="#faq" className="hover:text-foreground">
               FAQ
             </a>
+            <Link to="/progress" className="hover:text-foreground">
+              Progress
+            </Link>
           </div>
         </div>
       </footer>
@@ -450,6 +453,9 @@ function Header() {
         <a href="#faq" className="hover:text-foreground">
           FAQ
         </a>
+        <Link to="/progress" className="hover:text-foreground">
+          Progress
+        </Link>
       </nav>
 
       <div className="flex items-center gap-2">

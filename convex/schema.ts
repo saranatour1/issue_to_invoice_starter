@@ -15,6 +15,7 @@ import {
 export default defineSchema({
   users: defineTable(zodToConvexFields(userTableFields))
     .index('by_userId', ['userId'])
+    .index('by_email', ['email'])
     .index('by_tokenIdentifier', ['tokenIdentifier']),
 
   projects: defineTable(zodToConvexFields(projectTableFields))
