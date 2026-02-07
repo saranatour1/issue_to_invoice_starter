@@ -8,6 +8,8 @@ import type { ReactNode } from 'react';
 import type { ConvexReactClient } from 'convex/react';
 import type { ConvexQueryClient } from '@convex-dev/react-query';
 
+import { DEFAULT_DESCRIPTION, DEFAULT_TITLE, absoluteUrl, createSeoMeta } from '@/lib/seo';
+
 const fetchWorkosAuth = createServerFn({ method: 'GET' }).handler(async () => {
   const auth = await getAuth();
   const { user } = auth;
@@ -23,24 +25,30 @@ export const Route = createRootRouteWithContext<{
   convexClient: ConvexReactClient;
   convexQueryClient: ConvexQueryClient;
 }>()({
-  head: () => ({
-    meta: [
-      {
-        charSet: 'utf-8',
-      },
-      {
-        name: 'viewport',
-        content: 'width=device-width, initial-scale=1',
-      },
-      {
-        title: 'Convex + TanStack Start + WorkOS AuthKit',
-      },
-    ],
-    links: [
-      { rel: 'stylesheet', href: appCssUrl },
-      { rel: 'icon', href: '/convex.svg' },
-    ],
-  }),
+  head: ({ match }: any) => {
+    const canonicalUrl = absoluteUrl(match.pathname as string);
+    const seo = createSeoMeta({
+      title: DEFAULT_TITLE,
+      description: DEFAULT_DESCRIPTION,
+      pathname: match.pathname as string,
+      ogImagePath: '/convex.svg',
+    });
+
+    return {
+      meta: [
+        { charSet: 'utf-8' },
+        { name: 'viewport', content: 'width=device-width, initial-scale=1' },
+        { name: 'robots', content: 'index,follow,max-image-preview:large' },
+        { name: 'googlebot', content: 'index,follow,max-image-preview:large' },
+        ...seo.meta,
+      ],
+      links: [
+        { rel: 'stylesheet', href: appCssUrl },
+        { rel: 'icon', href: '/convex.svg' },
+        ...(canonicalUrl ? [{ rel: 'canonical', href: canonicalUrl }] : []),
+      ],
+    };
+  },
   component: RootComponent,
   notFoundComponent: () => <div>Not Found</div>,
   beforeLoad: async (ctx) => {
@@ -72,7 +80,7 @@ function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
       </head>
       <body>
         {children}
-              <TanStackDevtools />
+        {import.meta.env.DEV ? <TanStackDevtools /> : null}
         <Scripts />
       </body>
     </html>

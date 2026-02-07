@@ -1,0 +1,19 @@
+# Issue → Invoice
+
+Issue → Invoice is a web app that connects issue intake → estimates → time tracking → invoicing.
+
+## Public page
+
+- `/` — Product overview and sign-in entry point.
+
+## App pages (require sign-in; not intended for indexing)
+
+- `/_authenticated/...` — Dashboard (issues, time tracking, invoices).
+
+## Core concepts (agent-friendly summary)
+
+- Projects: group work by client/team.
+- Issues: track requests and tasks; can include sub-issues.
+- Favorites: star issues for quick access.
+- Links: model dependencies (`blocked by`) and loose relationships (`related`).
+

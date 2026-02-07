@@ -19,18 +19,67 @@ import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { SITE_NAME, absoluteUrl, createSeoMeta, getPublicSiteUrl } from '@/lib/seo';
 
 export const Route = createFileRoute('/')({
-  head: () => ({
-    meta: [
-      { title: 'Issue → Estimate → Invoice' },
-      {
-        name: 'description',
-        content:
-          'Unify GitHub, Linear, and in-app requests. Estimate work, track time, and invoice clients—without spreadsheets.',
-      },
-    ],
-  }),
+  head: ({ match }) => {
+    const title = 'From issue to invoice';
+    const description =
+      'Unify GitHub, Linear, and in-app requests. Estimate work, track time, and invoice clients—without spreadsheets.';
+    const siteUrl = getPublicSiteUrl();
+    const pageUrl = absoluteUrl(match.pathname);
+
+    const jsonLdWebSite = {
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      name: SITE_NAME,
+      ...(siteUrl ? { url: siteUrl } : {}),
+      ...(pageUrl ? { '@id': `${pageUrl}#website` } : {}),
+      description,
+      inLanguage: 'en',
+    };
+
+    const jsonLdSoftwareApp = {
+      '@context': 'https://schema.org',
+      '@type': 'SoftwareApplication',
+      name: SITE_NAME,
+      ...(siteUrl ? { url: siteUrl } : {}),
+      ...(pageUrl ? { '@id': `${pageUrl}#software` } : {}),
+      applicationCategory: 'BusinessApplication',
+      operatingSystem: 'Web',
+      description,
+    };
+
+    const jsonLdFaqPage = {
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      ...(pageUrl ? { '@id': `${pageUrl}#faq` } : {}),
+      mainEntity: faqs.map((f) => ({
+        '@type': 'Question',
+        name: f.question,
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: f.answer,
+        },
+      })),
+    };
+
+    const seo = createSeoMeta({
+      title: `${title} | ${SITE_NAME}`,
+      description,
+      pathname: match.pathname,
+      ogImagePath: '/convex.svg',
+    });
+
+    return {
+      meta: seo.meta,
+      scripts: [
+        { type: 'application/ld+json', children: JSON.stringify(jsonLdWebSite) },
+        { type: 'application/ld+json', children: JSON.stringify(jsonLdSoftwareApp) },
+        { type: 'application/ld+json', children: JSON.stringify(jsonLdFaqPage) },
+      ],
+    };
+  },
   component: LandingPage,
 });
 
@@ -122,6 +171,34 @@ const technologies: Array<Technology> = [
     description: 'Send invoices and client updates by email without building a mail pipeline from scratch.',
     status: 'Planned',
     icon: RiMailSendLine,
+  },
+];
+
+type Faq = {
+  question: string;
+  answer: string;
+};
+
+const faqs: Array<Faq> = [
+  {
+    question: 'Do I need to move everything out of GitHub or Linear?',
+    answer:
+      'No. The goal is to keep your existing workflows and add a billing-friendly layer that ties work to clients.',
+  },
+  {
+    question: 'Can I invoice multiple clients in the same week?',
+    answer:
+      'Yes. Track time against the right client/project and generate separate invoices without manual sorting.',
+  },
+  {
+    question: 'How do estimates work?',
+    answer:
+      'Add an estimate when the request comes in, then refine it as scope changes. Estimates stay linked to the invoice line item.',
+  },
+  {
+    question: 'Is it secure?',
+    answer:
+      'The app is designed for multi-client workflows, with clear access boundaries and audit-friendly activity tracking.',
   },
 ];
 
@@ -289,22 +366,9 @@ function LandingPage() {
       <section id="faq" className="mx-auto max-w-6xl px-4 pb-16">
         <SectionHeader title="FAQ" description="A few quick answers while this is still early." />
         <div className="mt-8 grid gap-4 lg:grid-cols-2">
-          <FaqCard
-            question="Do I need to move everything out of GitHub or Linear?"
-            answer="No. The goal is to keep your existing workflows and add a billing-friendly layer that ties work to clients."
-          />
-          <FaqCard
-            question="Can I invoice multiple clients in the same week?"
-            answer="Yes. Track time against the right client/project and generate separate invoices without manual sorting."
-          />
-          <FaqCard
-            question="How do estimates work?"
-            answer="Add an estimate when the request comes in, then refine it as scope changes. Estimates stay linked to the invoice line item."
-          />
-          <FaqCard
-            question="Is it secure?"
-            answer="The app is designed for multi-client workflows, with clear access boundaries and audit-friendly activity tracking."
-          />
+          {faqs.map((faq) => (
+            <FaqCard key={faq.question} question={faq.question} answer={faq.answer} />
+          ))}
         </div>
       </section>
 

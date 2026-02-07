@@ -3,6 +3,12 @@ import { createFileRoute, useParams } from '@tanstack/react-router';
 import { DashboardPage } from '@/components/dashboard/dashboard-page';
 
 export const Route = createFileRoute('/_authenticated/$projectId/issues')({
+  head: () => ({
+    meta: [
+      { title: 'Issues | Issue → Invoice' },
+      { name: 'description', content: 'Track issues, sub-issues, favorites, and dependencies.' },
+    ],
+  }),
   component: IssuesPage,
 });
 
@@ -16,4 +22,3 @@ function IssuesPage() {
 
   return <DashboardPage projectId={projectId} view="issues" issueIdParam={issueIdParam} />;
 }
-
