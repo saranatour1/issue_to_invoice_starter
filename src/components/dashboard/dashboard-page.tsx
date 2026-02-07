@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@workos/authkit-tanstack-react-start/client';
 import {
   RiAddLine,
+  RiArrowLeftLine,
   RiArrowRightSLine,
   RiCheckboxCircleLine,
   RiCircleLine,
@@ -17,13 +18,15 @@ import {
   RiNotification3Line,
   RiPlayLine,
   RiSearchLine,
+  RiStarFill,
+  RiStarLine,
   RiStopLine,
   RiTimerLine,
 } from '@remixicon/react';
 
 import { api } from '../../../convex/_generated/api';
 import type { Doc, Id } from '../../../convex/_generated/dataModel';
-import type { SubmitEvent } from 'react';
+import type { CSSProperties, SubmitEvent } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -81,6 +84,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
   const [issueStatusFilter, setIssueStatusFilter] = useState<IssueStatusFilter>('open');
   const [issuesLayout, setIssuesLayout] = useState<IssuesLayout>('list');
   const [issueSearch, setIssueSearch] = useState('');
+  const [issueFavoritesOnly, setIssueFavoritesOnly] = useState(false);
 
   const issueListArgs = useMemo(() => {
     const args: { projectId?: Id<'projects'>; status?: IssueStatus; limit: number } = { limit: 50 };
@@ -91,12 +95,26 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 
   const issues = useQuery(convexQuery(api.issues.listIssues, dashboardView === 'issues' ? issueListArgs : 'skip'));
 
+  const favoriteIssueIds = useQuery(
+    convexQuery(api.issues.listFavoriteIssueIds, dashboardView === 'issues' ? { limit: 200 } : 'skip'),
+  );
+  const favoriteIssueIdSet = useMemo(
+    () => new Set<Id<'issues'>>(favoriteIssueIds.data ?? []),
+    [favoriteIssueIds.data],
+  );
+  const favoriteIssues = useQuery(
+    convexQuery(api.issues.listFavoriteIssues, dashboardView === 'issues' ? { limit: 50 } : 'skip'),
+  );
+
   const filteredIssues = useMemo(() => {
     const q = issueSearch.trim().toLowerCase();
-    const items = issues.data ?? [];
+    let items = issues.data ?? [];
+    if (issueFavoritesOnly) {
+      items = items.filter((issue) => favoriteIssueIdSet.has(issue._id));
+    }
     if (!q) return items;
     return items.filter((issue) => issue.title.toLowerCase().includes(q));
-  }, [issueSearch, issues.data]);
+  }, [favoriteIssueIdSet, issueFavoritesOnly, issueSearch, issues.data]);
 
   const issuesByStatus = useMemo(() => {
     const buckets: Record<IssueStatus, Array<Doc<'issues'>>> = {
@@ -127,6 +145,40 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
     convexQuery(
       api.issues.listIssueCommentsFlat,
       dashboardView === 'issues' && selectedIssueId ? { issueId: selectedIssueId, limit: 200 } : 'skip',
+    ),
+  );
+
+  const subIssues = useQuery(
+    convexQuery(
+      api.issues.listIssues,
+      dashboardView === 'issues' && selectedIssueId ? { parentIssueId: selectedIssueId, limit: 50 } : 'skip',
+    ),
+  );
+
+  const parentIssue = useQuery(
+    convexQuery(
+      api.issues.getIssue,
+      dashboardView === 'issues' && selectedIssue.data?.parentIssueId
+        ? { issueId: selectedIssue.data.parentIssueId }
+        : 'skip',
+    ),
+  );
+
+  const blockedByIssues = useQuery(
+    convexQuery(
+      api.issues.listIssuesByIds,
+      dashboardView === 'issues' && selectedIssue.data && (selectedIssue.data.blockedByIssueIds ?? []).length
+        ? { issueIds: selectedIssue.data.blockedByIssueIds ?? [] }
+        : 'skip',
+    ),
+  );
+
+  const relatedIssues = useQuery(
+    convexQuery(
+      api.issues.listIssuesByIds,
+      dashboardView === 'issues' && selectedIssue.data && (selectedIssue.data.relatedIssueIds ?? []).length
+        ? { issueIds: selectedIssue.data.relatedIssueIds ?? [] }
+        : 'skip',
     ),
   );
 
@@ -161,10 +213,15 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
       for (const assigneeId of issue.assigneeIds) ids.add(assigneeId);
     }
 
-    const issue = selectedIssue.data;
-    if (issue) {
-      ids.add(issue.creatorId);
-      for (const assigneeId of issue.assigneeIds) ids.add(assigneeId);
+    const selected = selectedIssue.data;
+    if (selected) {
+      ids.add(selected.creatorId);
+      for (const assigneeId of selected.assigneeIds) ids.add(assigneeId);
+    }
+
+    for (const subIssue of subIssues.data ?? []) {
+      ids.add(subIssue.creatorId);
+      for (const assigneeId of subIssue.assigneeIds) ids.add(assigneeId);
     }
 
     for (const comment of selectedIssueComments.data ?? []) {
@@ -179,7 +236,14 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
     if (viewer.data?.userId) ids.add(viewer.data.userId);
 
     return Array.from(ids);
-  }, [filteredIssues, latestNotifications.data, selectedIssue.data, selectedIssueComments.data, viewer.data?.userId]);
+  }, [
+    filteredIssues,
+    latestNotifications.data,
+    selectedIssue.data,
+    selectedIssueComments.data,
+    subIssues.data,
+    viewer.data?.userId,
+  ]);
 
   const users = useQuery(
     convexQuery(api.users.listByUserIds, userIdsForLookup.length ? { userIds: userIdsForLookup } : 'skip'),
@@ -202,6 +266,8 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
   const setIssueStatusFn = useConvexMutation(api.issues.setIssueStatus);
   const setIssueAssigneesFn = useConvexMutation(api.issues.setIssueAssignees);
   const addIssueCommentFn = useConvexMutation(api.issues.addIssueComment);
+  const toggleIssueFavoriteFn = useConvexMutation(api.issues.toggleIssueFavorite);
+  const toggleIssueLinkFn = useConvexMutation(api.issues.toggleIssueLink);
   const startTimerFn = useConvexMutation(api.time.startTimer);
   const stopTimerFn = useConvexMutation(api.time.stopTimer);
   const markNotificationReadFn = useConvexMutation(api.notifications.markRead);
@@ -217,6 +283,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
   const createIssue = useMutation({
     mutationFn: (args: {
       projectId?: Id<'projects'>;
+      parentIssueId?: Id<'issues'>;
       title: string;
       description?: string;
       estimateMinutes?: number;
@@ -253,6 +320,21 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
     },
   });
 
+  const toggleIssueFavorite = useMutation({
+    mutationFn: (args: { issueId: Id<'issues'> }) => toggleIssueFavoriteFn(args),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['convexQuery'] });
+    },
+  });
+
+  const toggleIssueLink = useMutation({
+    mutationFn: (args: { issueId: Id<'issues'>; otherIssueId: Id<'issues'>; type: 'blocked_by' | 'related' }) =>
+      toggleIssueLinkFn(args),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['convexQuery'] });
+    },
+  });
+
   const startTimer = useMutation({
     mutationFn: (args: { issueId?: Id<'issues'>; projectId?: Id<'projects'>; description?: string }) =>
       startTimerFn(args),
@@ -280,6 +362,10 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
   const [newIssueDescription, setNewIssueDescription] = useState('');
   const [newIssueEstimate, setNewIssueEstimate] = useState('');
   const [newIssuePriority, setNewIssuePriority] = useState<IssuePriority>('medium');
+  const [newSubIssueTitle, setNewSubIssueTitle] = useState('');
+  const [newSubIssuePriority, setNewSubIssuePriority] = useState<IssuePriority>('medium');
+  const [blockedByPickerNonce, setBlockedByPickerNonce] = useState(0);
+  const [relatedPickerNonce, setRelatedPickerNonce] = useState(0);
 
   const [newCommentBody, setNewCommentBody] = useState('');
   const [replyToCommentId, setReplyToCommentId] = useState<Id<'issueComments'> | null>(null);
@@ -294,6 +380,46 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
   }, [dashboardView, filteredIssues, navigate, selectedIssueId]);
 
   const selectedProject = selectedProjectId ? projectById.get(selectedProjectId) ?? null : null;
+
+  const blockedByIssueIdSet = useMemo(
+    () => new Set<Id<'issues'>>(selectedIssue.data?.blockedByIssueIds ?? []),
+    [selectedIssue.data?.blockedByIssueIds],
+  );
+  const relatedIssueIdSet = useMemo(
+    () => new Set<Id<'issues'>>(selectedIssue.data?.relatedIssueIds ?? []),
+    [selectedIssue.data?.relatedIssueIds],
+  );
+
+  const linkCandidateIssues = useMemo(() => {
+    const map = new Map<Id<'issues'>, Doc<'issues'>>();
+    for (const issue of issues.data ?? []) map.set(issue._id, issue);
+    for (const issue of subIssues.data ?? []) map.set(issue._id, issue);
+    if (selectedIssue.data) map.set(selectedIssue.data._id, selectedIssue.data);
+    if (parentIssue.data) map.set(parentIssue.data._id, parentIssue.data);
+    return Array.from(map.values());
+  }, [issues.data, parentIssue.data, selectedIssue.data, subIssues.data]);
+
+  const blockedByCandidateIssues = useMemo(() => {
+    if (!selectedIssueId) return [];
+    return linkCandidateIssues
+      .filter((issue) => issue._id !== selectedIssueId && !blockedByIssueIdSet.has(issue._id))
+      .slice(0, 50);
+  }, [blockedByIssueIdSet, linkCandidateIssues, selectedIssueId]);
+
+  const relatedCandidateIssues = useMemo(() => {
+    if (!selectedIssueId) return [];
+    return linkCandidateIssues
+      .filter((issue) => issue._id !== selectedIssueId && !relatedIssueIdSet.has(issue._id))
+      .slice(0, 50);
+  }, [linkCandidateIssues, relatedIssueIdSet, selectedIssueId]);
+
+  const favoriteIssuesInScope = useMemo(() => {
+    let items = favoriteIssues.data ?? [];
+    if (selectedProjectId) {
+      items = items.filter((issue) => issue.projectId === selectedProjectId);
+    }
+    return items.slice(0, 10);
+  }, [favoriteIssues.data, selectedProjectId]);
 
   const handleCreateProject = async (event: SubmitEvent) => {
     event.preventDefault();
@@ -322,6 +448,22 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
     setNewIssueDescription('');
     setNewIssueEstimate('');
     setNewIssuePriority('medium');
+  };
+
+  const handleCreateSubIssue = async (event: SubmitEvent) => {
+    event.preventDefault();
+    if (!selectedIssueId) return;
+    const title = newSubIssueTitle.trim();
+    if (!title) return;
+
+    await createIssue.mutateAsync({
+      parentIssueId: selectedIssueId,
+      title,
+      priority: newSubIssuePriority,
+    });
+
+    setNewSubIssueTitle('');
+    setNewSubIssuePriority('medium');
   };
 
   const handleAddComment = async (event: SubmitEvent) => {
@@ -383,9 +525,9 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 
   return (
     <main className="min-h-dvh bg-background text-foreground">
-      <div className="flex min-h-dvh">
-        <Sidebar className="w-56">
-          <SidebarHeader>
+      <SidebarProvider style={{ ['--sidebar-width' as any]: '14rem' } as CSSProperties}>
+        <Sidebar>
+          <SidebarHeader className="h-12 flex-row items-center px-4 py-0">
             <div className="bg-sidebar-accent text-sidebar-accent-foreground inline-flex size-7 items-center justify-center rounded-lg border border-sidebar-border/70">
               <RiHashtag className="size-4" />
             </div>
@@ -482,7 +624,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
             </SidebarGroup>
           </SidebarContent>
 
-          <SidebarFooter>
+          <SidebarFooter className="flex-row items-center border-t border-sidebar-border/70 px-4 py-3">
             <div className="flex items-center gap-2">
               <UserAvatar userId={signedInUser?.id ?? viewerId} user={signedInMinimalUser} />
               <div className="min-w-0 flex-1">
@@ -503,12 +645,11 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
               </Button>
             </div>
           </SidebarFooter>
-	        </Sidebar>
-	
-	        <SidebarProvider>
-	        <Sidebar className="w-72">
-	          {dashboardView === 'issues' ? (
-	            <>
+        </Sidebar>
+
+        <Sidebar collapsible="none" className="hidden md:flex w-72 border-r border-sidebar-border/70">
+		          {dashboardView === 'issues' ? (
+		            <>
               <SidebarHeader>
                 <div className="min-w-0">
                   <p className="truncate text-xs font-medium">Projects</p>
@@ -518,65 +659,123 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                 </div>
               </SidebarHeader>
 
-              <SidebarContent>
-                  <SidebarMenu>
-                    <SidebarMenuItem>
-                    <SidebarMenuButton
-                      isActive={projectId === 'all'}
-                      onClick={() => navigate({ to: '/$projectId/issues', params: { projectId: 'all' } })}
-                    >
-                      All issues
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                </SidebarMenu>
+	              <SidebarContent>
+	                <SidebarGroup>
+	                  <SidebarGroupLabel>Views</SidebarGroupLabel>
+	                  <SidebarGroupContent>
+	                    <SidebarMenuButton
+	                      isActive={projectId === 'all' && !issueFavoritesOnly}
+	                      onClick={() => {
+	                        setIssueFavoritesOnly(false);
+	                        navigate({ to: '/$projectId/issues', params: { projectId: 'all' } });
+	                      }}
+	                    >
+	                      All issues
+	                    </SidebarMenuButton>
+	                    <SidebarMenuButton
+	                      isActive={issueFavoritesOnly}
+	                      onClick={() => {
+	                        setIssueFavoritesOnly((prev) => {
+	                          const next = !prev;
+	                          if (next) setIssueStatusFilter('all');
+	                          return next;
+	                        });
+	                      }}
+	                      className="justify-between"
+	                    >
+	                      <span className="inline-flex items-center gap-2">
+	                        <RiStarLine className="size-4 opacity-70" />
+	                        Favorites
+	                      </span>
+	                      {favoriteIssueIds.data?.length ? (
+	                        <Badge variant="secondary">{favoriteIssueIds.data.length}</Badge>
+	                      ) : null}
+	                    </SidebarMenuButton>
+	                  </SidebarGroupContent>
+	                </SidebarGroup>
 
-                <SidebarGroup>
-                  <SidebarGroupLabel>Projects</SidebarGroupLabel>
-                  <SidebarGroupContent>
-                    {(projects.data ?? []).map((project) => {
-                      const selected = selectedProjectId === project._id;
-                      return (
-                        <SidebarMenuButton
-                          key={project._id}
-                          isActive={selected}
-                          onClick={() => navigate({ to: '/$projectId/issues', params: { projectId: project._id } })}
-                          className="justify-between"
-                        >
-                          <span className="inline-flex min-w-0 items-center gap-2">
-                            <span
-                              className="size-2 rounded-full border border-sidebar-border/70"
-                              style={{ backgroundColor: project.color ?? 'transparent' }}
-                              aria-hidden
-                            />
-                            <span className="truncate">{project.name}</span>
-                          </span>
-                          <RiArrowRightSLine className="size-3.5 opacity-60" />
-                        </SidebarMenuButton>
-                      );
-                    })}
-                  </SidebarGroupContent>
-                </SidebarGroup>
+	                <SidebarGroup>
+	                  <SidebarGroupLabel>Favorites</SidebarGroupLabel>
+	                  <SidebarGroupContent>
+	                    {favoriteIssues.isLoading ? (
+	                      <p className="text-xs text-muted-foreground">Loading…</p>
+	                    ) : null}
+	                    {!favoriteIssues.isLoading && favoriteIssuesInScope.length === 0 ? (
+	                      <p className="text-xs text-muted-foreground">No favorites yet.</p>
+	                    ) : null}
+	                    {favoriteIssuesInScope.map((issue) => (
+	                      <SidebarMenuButton
+	                        key={issue._id}
+	                        onClick={() =>
+	                          navigate({
+	                            to: '/$projectId/issues/$issueId',
+	                            params: { projectId, issueId: issue._id },
+	                          })
+	                        }
+	                        className="justify-between"
+	                      >
+	                        <span className="inline-flex min-w-0 items-center gap-2">
+	                          <span className="text-muted-foreground" aria-hidden>
+	                            <StatusIcon status={issue.status as IssueStatus} />
+	                          </span>
+	                          <span className="truncate">{issue.title}</span>
+	                        </span>
+	                        <RiStarFill className="size-3.5 text-amber-500 opacity-90" />
+	                      </SidebarMenuButton>
+	                    ))}
+	                  </SidebarGroupContent>
+	                </SidebarGroup>
 
-                <SidebarGroup>
-                  <SidebarGroupLabel>New project</SidebarGroupLabel>
-                  <SidebarGroupContent>
-	                    <form onSubmit={handleCreateProject} className="flex items-center gap-2">
-	                      <Input
-	                        value={newProjectName}
-	                        onChange={(e) => setNewProjectName(e.target.value)}
-	                        placeholder="New project…"
-	                        aria-label="New project name"
-	                      />
-	                      <Button size="icon" variant="outline" disabled={createProject.isPending} type="submit">
-	                        <RiAddLine />
-	                      </Button>
-	                    </form>
-                    {createProject.error ? (
-                      <p className="mt-2 text-[0.625rem] text-destructive">Couldn’t create project.</p>
-                    ) : null}
-                  </SidebarGroupContent>
-                </SidebarGroup>
-              </SidebarContent>
+	                <SidebarGroup>
+	                  <SidebarGroupLabel>Projects</SidebarGroupLabel>
+	                  <SidebarGroupContent>
+	                    {(projects.data ?? []).map((project) => {
+	                      const selected = selectedProjectId === project._id;
+	                      return (
+	                        <SidebarMenuButton
+	                          key={project._id}
+	                          isActive={selected}
+	                          onClick={() => {
+	                            setIssueFavoritesOnly(false);
+	                            navigate({ to: '/$projectId/issues', params: { projectId: project._id } });
+	                          }}
+	                          className="justify-between"
+	                        >
+	                          <span className="inline-flex min-w-0 items-center gap-2">
+	                            <span
+	                              className="size-2 rounded-full border border-sidebar-border/70"
+	                              style={{ backgroundColor: project.color ?? 'transparent' }}
+	                              aria-hidden
+	                            />
+	                            <span className="truncate">{project.name}</span>
+	                          </span>
+	                          <RiArrowRightSLine className="size-3.5 opacity-60" />
+	                        </SidebarMenuButton>
+	                      );
+	                    })}
+	                  </SidebarGroupContent>
+	                </SidebarGroup>
+
+	                <SidebarGroup>
+	                  <SidebarGroupLabel>New project</SidebarGroupLabel>
+	                  <SidebarGroupContent>
+		                    <form onSubmit={handleCreateProject} className="flex items-center gap-2">
+		                      <Input
+		                        value={newProjectName}
+		                        onChange={(e) => setNewProjectName(e.target.value)}
+		                        placeholder="New project…"
+		                        aria-label="New project name"
+		                      />
+		                      <Button size="icon" variant="outline" disabled={createProject.isPending} type="submit">
+		                        <RiAddLine />
+		                      </Button>
+		                    </form>
+	                    {createProject.error ? (
+	                      <p className="mt-2 text-[0.625rem] text-destructive">Couldn’t create project.</p>
+	                    ) : null}
+	                  </SidebarGroupContent>
+	                </SidebarGroup>
+	              </SidebarContent>
             </>
           ) : dashboardView === 'time' ? (
             <>
@@ -636,13 +835,11 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 	          )}
 	        </Sidebar>
 	
-	        <section className="flex min-w-0 flex-1 flex-col">
-	          <header className="flex h-12 items-center gap-2 border-b border-border/60 px-4">
-	            <SidebarTrigger size="icon" variant="outline" title="Toggle sidebar">
-	              <RiArrowRightSLine className="size-4" />
-	            </SidebarTrigger>
-	            <div className="min-w-0">
-	              <p className="truncate text-xs font-medium">
+		        <section className="flex min-w-0 flex-1 flex-col">
+		          <header className="flex h-12 items-center gap-2 border-b border-border/60 px-4">
+		            <SidebarTrigger size="icon" variant="outline" title="Toggle sidebar" />
+		            <div className="min-w-0">
+		              <p className="truncate text-xs font-medium">
 	                {dashboardView === 'issues'
                   ? selectedProject
                     ? selectedProject.name
@@ -675,13 +872,13 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                     />
                   </div>
 
-	                  <Select
-	                    value={issueStatusFilter}
-	                    onValueChange={(value) => setIssueStatusFilter(value as IssueStatusFilter)}
-	                  >
-	                    <SelectTrigger size="sm">
-	                      <SelectValue />
-	                    </SelectTrigger>
+		                  <Select
+		                    value={issueStatusFilter}
+		                    onValueChange={(value) => setIssueStatusFilter(value as IssueStatusFilter)}
+		                  >
+		                    <SelectTrigger size="sm">
+		                      <SelectValue />
+		                    </SelectTrigger>
 	                    <SelectContent>
 	                      <SelectItem value="open">Open</SelectItem>
 	                      <SelectItem value="in_progress">In progress</SelectItem>
@@ -689,13 +886,34 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 	                      <SelectItem value="closed">Closed</SelectItem>
 	                      <Separator className="my-1" />
 	                      <SelectItem value="all">All</SelectItem>
-	                    </SelectContent>
-	                  </Select>
+		                    </SelectContent>
+		                  </Select>
 
-	                  <div className="flex items-center gap-1">
-	                    <Button
-	                      size="sm"
-	                      variant={issuesLayout === 'list' ? 'secondary' : 'outline'}
+		                  <Button
+		                    size="sm"
+		                    variant={issueFavoritesOnly ? 'secondary' : 'outline'}
+		                    className="gap-1"
+		                    onClick={() => {
+		                      setIssueFavoritesOnly((prev) => {
+		                        const next = !prev;
+		                        if (next) setIssueStatusFilter('all');
+		                        return next;
+		                      });
+		                    }}
+		                    title={issueFavoritesOnly ? 'Showing favorites' : 'Show favorites'}
+		                  >
+		                    {issueFavoritesOnly ? (
+		                      <RiStarFill className="size-4 text-amber-500" />
+		                    ) : (
+		                      <RiStarLine className="size-4" />
+		                    )}
+		                    <span className="hidden lg:inline">Favorites</span>
+		                  </Button>
+
+		                  <div className="flex items-center gap-1">
+		                    <Button
+		                      size="sm"
+		                      variant={issuesLayout === 'list' ? 'secondary' : 'outline'}
 	                      onClick={() => setIssuesLayout('list')}
 	                    >
 	                      List
@@ -792,8 +1010,8 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
             </div>
           </header>
 
-          {dashboardView === 'issues' ? (
-            <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[1fr_420px]">
+	          {dashboardView === 'issues' ? (
+	            <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[1fr_520px]">
             <div className="flex min-w-0 flex-col border-r border-border/60">
               <div className="border-b border-border/60 p-4">
                 <form onSubmit={handleCreateIssue} className="grid gap-2">
@@ -892,13 +1110,32 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 	                              </div>
 	                            </div>
 	
-	                            <div className="mt-0.5 flex items-center gap-2">
-	                              <AssigneeStack assigneeIds={issue.assigneeIds} userById={userById} />
-	                              <Button
-	                                size="icon-xs"
-	                                variant="ghost"
-	                                onClick={(e) => {
-	                                  e.preventDefault();
+		                            <div className="mt-0.5 flex items-center gap-2">
+		                              <AssigneeStack assigneeIds={issue.assigneeIds} userById={userById} />
+		                              <Button
+		                                size="icon-xs"
+		                                variant="ghost"
+		                                onClick={(e) => {
+		                                  e.preventDefault();
+		                                  e.stopPropagation();
+		                                  toggleIssueFavorite.mutate({ issueId: issue._id });
+		                                }}
+		                                disabled={toggleIssueFavorite.isPending}
+		                                title={
+		                                  favoriteIssueIdSet.has(issue._id) ? 'Remove from favorites' : 'Add to favorites'
+		                                }
+		                              >
+		                                {favoriteIssueIdSet.has(issue._id) ? (
+		                                  <RiStarFill className="text-amber-500" />
+		                                ) : (
+		                                  <RiStarLine />
+		                                )}
+		                              </Button>
+		                              <Button
+		                                size="icon-xs"
+		                                variant="ghost"
+		                                onClick={(e) => {
+		                                  e.preventDefault();
 	                                  e.stopPropagation();
 	                                  startTimer.mutate({ issueId: issue._id });
 	                                }}
@@ -957,19 +1194,42 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 	                                      selected && 'ring-1 ring-primary',
 	                                    )}
 	                                  >
-	                                    <div className="flex items-start justify-between gap-2">
-	                                      <div className="min-w-0 flex-1">
-	                                        <p className="truncate font-medium">{issue.title}</p>
-	                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[0.625rem] text-muted-foreground">
-	                                          {projectName ? <span className="truncate">{projectName}</span> : null}
-	                                          <span className="tabular-nums">
-	                                            {timeAgo(issue.lastActivityAt, now)}
-	                                          </span>
-	                                          {estimate ? <Badge variant="outline">{estimate}</Badge> : null}
-	                                        </div>
-	                                      </div>
-	                                      <PriorityPill priority={issue.priority} />
-	                                    </div>
+		                                    <div className="flex items-start justify-between gap-2">
+		                                      <div className="min-w-0 flex-1">
+		                                        <p className="truncate font-medium">{issue.title}</p>
+		                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[0.625rem] text-muted-foreground">
+		                                          {projectName ? <span className="truncate">{projectName}</span> : null}
+		                                          <span className="tabular-nums">
+		                                            {timeAgo(issue.lastActivityAt, now)}
+		                                          </span>
+		                                          {estimate ? <Badge variant="outline">{estimate}</Badge> : null}
+		                                        </div>
+		                                      </div>
+		                                      <div className="flex items-center gap-1">
+		                                        <Button
+		                                          size="icon-xs"
+		                                          variant="ghost"
+		                                          onClick={(e) => {
+		                                            e.preventDefault();
+		                                            e.stopPropagation();
+		                                            toggleIssueFavorite.mutate({ issueId: issue._id });
+		                                          }}
+		                                          disabled={toggleIssueFavorite.isPending}
+		                                          title={
+		                                            favoriteIssueIdSet.has(issue._id)
+		                                              ? 'Remove from favorites'
+		                                              : 'Add to favorites'
+		                                          }
+		                                        >
+		                                          {favoriteIssueIdSet.has(issue._id) ? (
+		                                            <RiStarFill className="text-amber-500" />
+		                                          ) : (
+		                                            <RiStarLine />
+		                                          )}
+		                                        </Button>
+		                                        <PriorityPill priority={issue.priority} />
+		                                      </div>
+		                                    </div>
 	                                    <div className="mt-2 flex items-center justify-between gap-2">
 	                                      <AssigneeStack assigneeIds={issue.assigneeIds} userById={userById} />
 	                                    </div>
@@ -990,20 +1250,58 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
               <div className="border-b border-border/60 p-4">
                 {selectedIssue.data ? (
                   <>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold">{selectedIssue.data.title}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {selectedIssue.data.projectId
-                            ? projectById.get(selectedIssue.data.projectId)?.name ?? 'Project'
-                            : 'No project'}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => navigate({ to: '/$projectId/issues', params: { projectId } })}
+	                    <div className="flex items-start justify-between gap-3">
+	                      <div className="min-w-0">
+		                        {selectedIssue.data.parentIssueId ? (
+		                          <button
+		                            type="button"
+		                            className="mb-1 inline-flex items-center gap-1 text-[0.625rem] text-muted-foreground hover:text-foreground"
+		                            onClick={() => {
+		                              const parentId = selectedIssue.data?.parentIssueId;
+		                              if (!parentId) return;
+		                              navigate({
+		                                to: '/$projectId/issues/$issueId',
+		                                params: { projectId, issueId: parentId },
+		                              });
+		                            }}
+		                            title="Go to parent issue"
+		                          >
+	                            <RiArrowLeftLine className="size-3.5" />
+	                            <span className="truncate">{parentIssue.data?.title ?? 'Parent issue'}</span>
+	                          </button>
+	                        ) : null}
+	                        <p className="text-sm font-semibold">{selectedIssue.data.title}</p>
+	                        <p className="mt-1 text-xs text-muted-foreground">
+	                          {selectedIssue.data.projectId
+	                            ? projectById.get(selectedIssue.data.projectId)?.name ?? 'Project'
+	                            : 'No project'}
+	                        </p>
+	                      </div>
+	                      <div className="flex items-center gap-2">
+	                        <Button
+	                          size="icon"
+	                          variant="ghost"
+	                          onClick={() => {
+	                            if (!selectedIssueId) return;
+	                            toggleIssueFavorite.mutate({ issueId: selectedIssueId });
+	                          }}
+	                          disabled={!selectedIssueId || toggleIssueFavorite.isPending}
+	                          title={
+	                            selectedIssueId && favoriteIssueIdSet.has(selectedIssueId)
+	                              ? 'Remove from favorites'
+	                              : 'Add to favorites'
+	                          }
+	                        >
+	                          {selectedIssueId && favoriteIssueIdSet.has(selectedIssueId) ? (
+	                            <RiStarFill className="text-amber-500" />
+	                          ) : (
+	                            <RiStarLine />
+	                          )}
+	                        </Button>
+	                        <Button
+	                          size="icon"
+	                          variant="ghost"
+	                          onClick={() => navigate({ to: '/$projectId/issues', params: { projectId } })}
                           title="Close"
                         >
                           <RiCloseLine />
@@ -1081,13 +1379,255 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                 )}
               </div>
 
-              {selectedIssue.data ? (
-                <div className="p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-medium">Comments</p>
-                    {replyToCommentId ? (
-                      <button
-                        type="button"
+	              {selectedIssue.data ? (
+	                <div className="p-4">
+	                  <div>
+	                    <div className="flex items-center justify-between gap-2">
+	                      <p className="text-xs font-medium">Sub-issues</p>
+	                      <Badge variant="outline">{(subIssues.data ?? []).length}</Badge>
+	                    </div>
+
+	                    {subIssues.isLoading ? (
+	                      <p className="mt-2 text-xs text-muted-foreground">Loading sub-issues…</p>
+	                    ) : null}
+
+	                    {!subIssues.isLoading && (subIssues.data ?? []).length === 0 ? (
+	                      <p className="mt-2 text-xs text-muted-foreground">No sub-issues yet.</p>
+	                    ) : null}
+
+	                    <div className="mt-2 grid gap-2">
+	                      {(subIssues.data ?? []).slice(0, 20).map((sub) => {
+	                        const estimate = sub.estimateMinutes ? formatEstimate(sub.estimateMinutes) : null;
+	                        return (
+	                          <button
+	                            key={sub._id}
+	                            type="button"
+	                            onClick={() =>
+	                              navigate({
+	                                to: '/$projectId/issues/$issueId',
+	                                params: { projectId, issueId: sub._id },
+	                              })
+	                            }
+	                            className="flex items-start justify-between gap-3 rounded-md border border-border/60 bg-muted/10 px-2 py-2 text-left text-xs transition-colors hover:bg-muted/20"
+	                          >
+	                            <div className="min-w-0 flex-1">
+	                              <div className="flex items-center gap-2">
+	                                <span className="text-muted-foreground" aria-hidden>
+	                                  <StatusIcon status={sub.status as IssueStatus} />
+	                                </span>
+	                                <span className="truncate font-medium">{sub.title}</span>
+	                                <PriorityPill priority={sub.priority as IssuePriority} />
+	                              </div>
+	                              <div className="mt-1 flex flex-wrap items-center gap-2 text-[0.625rem] text-muted-foreground">
+	                                <span className="tabular-nums">{timeAgo(sub.lastActivityAt, now)}</span>
+	                                {estimate ? <Badge variant="outline">{estimate}</Badge> : null}
+	                              </div>
+	                            </div>
+	                            <AssigneeStack assigneeIds={sub.assigneeIds} userById={userById} />
+	                          </button>
+	                        );
+	                      })}
+	                    </div>
+
+	                    <form onSubmit={handleCreateSubIssue} className="mt-3 flex items-center gap-2">
+	                      <Input
+	                        value={newSubIssueTitle}
+	                        onChange={(e) => setNewSubIssueTitle(e.target.value)}
+	                        placeholder="New sub-issue…"
+	                        aria-label="Sub-issue title"
+	                      />
+	                      <Select value={newSubIssuePriority} onValueChange={(value) => setNewSubIssuePriority(value as any)}>
+	                        <SelectTrigger size="sm">
+	                          <SelectValue />
+	                        </SelectTrigger>
+	                        <SelectContent>
+	                          <SelectItem value="low">Low</SelectItem>
+	                          <SelectItem value="medium">Medium</SelectItem>
+	                          <SelectItem value="high">High</SelectItem>
+	                          <SelectItem value="urgent">Urgent</SelectItem>
+	                        </SelectContent>
+	                      </Select>
+	                      <Button size="icon" variant="outline" disabled={createIssue.isPending} type="submit">
+	                        <RiAddLine />
+	                      </Button>
+	                    </form>
+	                  </div>
+
+	                  <Separator className="my-4" />
+
+	                  <div className="grid gap-3">
+	                    <p className="text-xs font-medium">Links</p>
+
+	                    <div className="grid gap-3">
+	                      <div className="rounded-md border border-border/60 bg-muted/10 p-3">
+	                        <div className="flex items-center justify-between gap-2">
+	                          <p className="text-[0.625rem] font-medium text-muted-foreground">Blocked by</p>
+	                          <Select
+	                            key={blockedByPickerNonce}
+	                            onValueChange={(value) => {
+	                              if (!selectedIssueId) return;
+	                              toggleIssueLink.mutate({
+	                                issueId: selectedIssueId,
+	                                otherIssueId: value as any,
+	                                type: 'blocked_by',
+	                              });
+	                              setBlockedByPickerNonce((n) => n + 1);
+	                            }}
+	                          >
+	                            <SelectTrigger
+	                              size="sm"
+	                              disabled={!selectedIssueId || blockedByCandidateIssues.length === 0 || toggleIssueLink.isPending}
+	                            >
+	                              <SelectValue placeholder="Add blocker…" />
+	                            </SelectTrigger>
+	                            <SelectContent>
+	                              {blockedByCandidateIssues.map((issue) => (
+	                                <SelectItem key={issue._id} value={issue._id}>
+	                                  {issue.title}
+	                                </SelectItem>
+	                              ))}
+	                            </SelectContent>
+	                          </Select>
+	                        </div>
+	                        <div className="mt-2 grid gap-2">
+	                          {blockedByIssues.isLoading ? (
+	                            <p className="text-xs text-muted-foreground">Loading…</p>
+	                          ) : null}
+	                          {!blockedByIssues.isLoading && (blockedByIssues.data ?? []).length === 0 ? (
+	                            <p className="text-xs text-muted-foreground">Not blocked.</p>
+	                          ) : null}
+	                          {(blockedByIssues.data ?? []).map((blocker) => (
+	                            <button
+	                              key={blocker._id}
+	                              type="button"
+	                              className="flex w-full items-center justify-between gap-2 rounded-md border border-border/60 bg-background px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted/20"
+	                              onClick={() =>
+	                                navigate({
+	                                  to: '/$projectId/issues/$issueId',
+	                                  params: { projectId, issueId: blocker._id },
+	                                })
+	                              }
+	                            >
+	                              <span className="min-w-0 inline-flex items-center gap-2">
+	                                <span className="text-muted-foreground" aria-hidden>
+	                                  <StatusIcon status={blocker.status as IssueStatus} />
+	                                </span>
+	                                <span className="truncate font-medium">{blocker.title}</span>
+	                                <PriorityPill priority={blocker.priority as IssuePriority} />
+	                              </span>
+	                              <Button
+	                                size="icon-xs"
+	                                variant="ghost"
+	                                onClick={(e) => {
+	                                  e.preventDefault();
+	                                  e.stopPropagation();
+	                                  if (!selectedIssueId) return;
+	                                  toggleIssueLink.mutate({
+	                                    issueId: selectedIssueId,
+	                                    otherIssueId: blocker._id,
+	                                    type: 'blocked_by',
+	                                  });
+	                                }}
+	                                disabled={toggleIssueLink.isPending}
+	                                title="Remove"
+	                              >
+	                                <RiCloseLine />
+	                              </Button>
+	                            </button>
+	                          ))}
+	                        </div>
+	                      </div>
+
+	                      <div className="rounded-md border border-border/60 bg-muted/10 p-3">
+	                        <div className="flex items-center justify-between gap-2">
+	                          <p className="text-[0.625rem] font-medium text-muted-foreground">Related</p>
+	                          <Select
+	                            key={relatedPickerNonce}
+	                            onValueChange={(value) => {
+	                              if (!selectedIssueId) return;
+	                              toggleIssueLink.mutate({
+	                                issueId: selectedIssueId,
+	                                otherIssueId: value as any,
+	                                type: 'related',
+	                              });
+	                              setRelatedPickerNonce((n) => n + 1);
+	                            }}
+	                          >
+	                            <SelectTrigger
+	                              size="sm"
+	                              disabled={!selectedIssueId || relatedCandidateIssues.length === 0 || toggleIssueLink.isPending}
+	                            >
+	                              <SelectValue placeholder="Add related…" />
+	                            </SelectTrigger>
+	                            <SelectContent>
+	                              {relatedCandidateIssues.map((issue) => (
+	                                <SelectItem key={issue._id} value={issue._id}>
+	                                  {issue.title}
+	                                </SelectItem>
+	                              ))}
+	                            </SelectContent>
+	                          </Select>
+	                        </div>
+	                        <div className="mt-2 grid gap-2">
+	                          {relatedIssues.isLoading ? <p className="text-xs text-muted-foreground">Loading…</p> : null}
+	                          {!relatedIssues.isLoading && (relatedIssues.data ?? []).length === 0 ? (
+	                            <p className="text-xs text-muted-foreground">No related issues.</p>
+	                          ) : null}
+	                          {(relatedIssues.data ?? []).map((related) => (
+	                            <button
+	                              key={related._id}
+	                              type="button"
+	                              className="flex w-full items-center justify-between gap-2 rounded-md border border-border/60 bg-background px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted/20"
+	                              onClick={() =>
+	                                navigate({
+	                                  to: '/$projectId/issues/$issueId',
+	                                  params: { projectId, issueId: related._id },
+	                                })
+	                              }
+	                            >
+	                              <span className="min-w-0 inline-flex items-center gap-2">
+	                                <span className="text-muted-foreground" aria-hidden>
+	                                  <StatusIcon status={related.status as IssueStatus} />
+	                                </span>
+	                                <span className="truncate font-medium">{related.title}</span>
+	                                <PriorityPill priority={related.priority as IssuePriority} />
+	                              </span>
+	                              <Button
+	                                size="icon-xs"
+	                                variant="ghost"
+	                                onClick={(e) => {
+	                                  e.preventDefault();
+	                                  e.stopPropagation();
+	                                  if (!selectedIssueId) return;
+	                                  toggleIssueLink.mutate({
+	                                    issueId: selectedIssueId,
+	                                    otherIssueId: related._id,
+	                                    type: 'related',
+	                                  });
+	                                }}
+	                                disabled={toggleIssueLink.isPending}
+	                                title="Remove"
+	                              >
+	                                <RiCloseLine />
+	                              </Button>
+	                            </button>
+	                          ))}
+	                        </div>
+	                      </div>
+	                    </div>
+
+	                    {toggleIssueLink.error ? (
+	                      <p className="text-[0.625rem] text-destructive">Couldn’t update issue links.</p>
+	                    ) : null}
+	                  </div>
+
+	                  <Separator className="my-4" />
+
+	                  <div className="flex items-center justify-between gap-2">
+	                    <p className="text-xs font-medium">Comments</p>
+	                    {replyToCommentId ? (
+	                      <button
+	                        type="button"
                         className="text-[0.625rem] text-muted-foreground hover:text-foreground"
                         onClick={() => setReplyToCommentId(null)}
                       >
@@ -1288,8 +1828,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
             </div>
 	          )}
 	        </section>
-	        </SidebarProvider>
-	      </div>
+      </SidebarProvider>
 	    </main>
 	  );
   }

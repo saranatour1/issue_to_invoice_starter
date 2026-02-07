@@ -3,6 +3,7 @@ import { zodToConvexFields } from 'convex-helpers/server/zod4';
 
 import {
   issueCommentTableFields,
+  issueFavoriteTableFields,
   issueReactionTableFields,
   issueTableFields,
   notificationTableFields,
@@ -23,11 +24,19 @@ export default defineSchema({
 
   issues: defineTable(zodToConvexFields(issueTableFields))
     .index('by_status', ['status'])
+    .index('by_status_parent_last_activity', ['status', 'parentIssueId', 'lastActivityAt'])
     .index('by_creator', ['creatorId'])
     .index('by_project_last_activity', ['projectId', 'lastActivityAt'])
+    .index('by_project_parent_last_activity', ['projectId', 'parentIssueId', 'lastActivityAt'])
     .index('by_source_external', ['source', 'externalId'])
     .index('by_archived', ['archivedAt'])
+    .index('by_parent_last_activity', ['parentIssueId', 'lastActivityAt'])
     .index('by_last_activity', ['lastActivityAt']),
+
+  issueFavorites: defineTable(zodToConvexFields(issueFavoriteTableFields))
+    .index('by_user_issue', ['userId', 'issueId'])
+    .index('by_user_created', ['userId', 'createdAt'])
+    .index('by_issue', ['issueId']),
 
   issueComments: defineTable(zodToConvexFields(issueCommentTableFields))
     .index('by_issue', ['issueId'])

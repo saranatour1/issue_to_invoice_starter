@@ -10,6 +10,9 @@ export type IssueStatus = z.infer<typeof IssueStatusSchema>;
 export const IssuePrioritySchema = z.enum(['low', 'medium', 'high', 'urgent']);
 export type IssuePriority = z.infer<typeof IssuePrioritySchema>;
 
+export const IssueLinkTypeSchema = z.enum(['blocked_by', 'related']);
+export type IssueLinkType = z.infer<typeof IssueLinkTypeSchema>;
+
 export const NotificationTypeSchema = z.enum([
   'issue_created',
   'issue_status_changed',
@@ -22,6 +25,7 @@ export type NotificationType = z.infer<typeof NotificationTypeSchema>;
 
 export const IssueIdSchema = zid('issues');
 export const IssueCommentIdSchema = zid('issueComments');
+export const IssueFavoriteIdSchema = zid('issueFavorites');
 export const NotificationIdSchema = zid('notifications');
 export const ProjectIdSchema = zid('projects');
 export const TimeEntryIdSchema = zid('timeEntries');
@@ -31,6 +35,7 @@ export const issueTableFields = {
   externalId: z.string().max(256).nullable(),
 
   projectId: ProjectIdSchema.nullable(),
+  parentIssueId: IssueIdSchema.nullable().optional(),
 
   title: z.string().min(1).max(200),
   description: z.string().max(50_000).nullable(),
@@ -41,9 +46,17 @@ export const issueTableFields = {
 
   creatorId: z.string(),
   assigneeIds: z.array(z.string()),
+  blockedByIssueIds: z.array(IssueIdSchema).max(50).optional(),
+  relatedIssueIds: z.array(IssueIdSchema).max(50).optional(),
 
   archivedAt: z.number().int().nullable(),
   lastActivityAt: z.number().int(),
+};
+
+export const issueFavoriteTableFields = {
+  issueId: IssueIdSchema,
+  userId: z.string(),
+  createdAt: z.number().int(),
 };
 
 export const issueCommentTableFields = {
@@ -115,6 +128,7 @@ export const timeEntryTableFields = {
 
 export const createIssueArgsSchema = z.object({
   projectId: ProjectIdSchema.optional(),
+  parentIssueId: IssueIdSchema.optional(),
   title: z.string().min(1).max(200),
   description: z.string().max(50_000).optional(),
   estimateMinutes: z.number().int().nonnegative().optional(),
@@ -128,9 +142,14 @@ export const setIssueAssigneesArgsSchema = z.object({
 
 export const listIssuesArgsSchema = z.object({
   projectId: ProjectIdSchema.optional(),
+  parentIssueId: IssueIdSchema.nullable().optional(),
   status: IssueStatusSchema.optional(),
   includeArchived: z.boolean().optional(),
   limit: z.number().int().min(1).max(200).optional(),
+});
+
+export const listIssuesByIdsArgsSchema = z.object({
+  issueIds: z.array(IssueIdSchema).max(50),
 });
 
 export const addIssueCommentArgsSchema = z.object({
@@ -152,6 +171,20 @@ export const listNotificationsArgsSchema = z.object({
 
 export const markNotificationReadArgsSchema = z.object({
   notificationId: NotificationIdSchema,
+});
+
+export const toggleIssueFavoriteArgsSchema = z.object({
+  issueId: IssueIdSchema,
+});
+
+export const listFavoriteIssuesArgsSchema = z.object({
+  limit: z.number().int().min(1).max(200).optional(),
+});
+
+export const toggleIssueLinkArgsSchema = z.object({
+  issueId: IssueIdSchema,
+  otherIssueId: IssueIdSchema,
+  type: IssueLinkTypeSchema,
 });
 
 export const getUserByUserIdArgsSchema = z.object({

@@ -6,8 +6,12 @@ import {
   IssueStatusSchema,
   addIssueCommentArgsSchema,
   createIssueArgsSchema,
+  listFavoriteIssuesArgsSchema,
   listIssuesArgsSchema,
+  listIssuesByIdsArgsSchema,
   setIssueAssigneesArgsSchema,
+  toggleIssueFavoriteArgsSchema,
+  toggleIssueLinkArgsSchema,
   toggleReactionArgsSchema,
 } from './issueModel';
 import { mutation, query } from './_generated/server';
@@ -87,18 +91,37 @@ export const createIssue = zMutation({
     const viewerId = await requireViewerId(ctx);
     const now = Date.now();
 
-    if (args.projectId) {
-      const project = await ctx.db.get('projects', args.projectId);
+    const parentIssueId = args.parentIssueId ?? null;
+    let projectId = args.projectId ?? null;
+
+    if (parentIssueId) {
+      const parent = await ctx.db.get('issues', parentIssueId);
+      if (!parent) {
+        throw new ConvexError('Parent issue not found');
+      }
+
+      if (args.projectId && parent.projectId !== args.projectId) {
+        throw new ConvexError('Sub-issue project must match parent issue project');
+      }
+
+      projectId = parent.projectId ?? null;
+
+      await ctx.db.patch('issues', parentIssueId, { lastActivityAt: now });
+    }
+
+    if (projectId) {
+      const project = await ctx.db.get('projects', projectId);
       if (!project) {
         throw new ConvexError('Project not found');
       }
-      await ctx.db.patch('projects', args.projectId, { lastActivityAt: now });
+      await ctx.db.patch('projects', projectId, { lastActivityAt: now });
     }
 
     const issueId = await ctx.db.insert('issues', {
       source: 'app',
       externalId: null,
-      projectId: args.projectId ?? null,
+      projectId,
+      parentIssueId,
       title: args.title.trim(),
       description: args.description?.trim() ?? null,
       status: 'open',
@@ -106,6 +129,8 @@ export const createIssue = zMutation({
       estimateMinutes: args.estimateMinutes ?? null,
       creatorId: viewerId,
       assigneeIds: [],
+      blockedByIssueIds: [],
+      relatedIssueIds: [],
       archivedAt: null,
       lastActivityAt: now,
     });
@@ -119,35 +144,86 @@ export const listIssues = zQuery({
   handler: async (ctx, args) => {
     const limit = args.limit ?? 50;
     const includeArchived = args.includeArchived ?? false;
+    const parentIssueId = args.parentIssueId ?? null;
+
+    const take = Math.min(200, includeArchived ? limit : limit * 4);
 
     let items: Array<any>;
-
-    if (args.projectId) {
+    if (parentIssueId !== null) {
+      if (args.projectId) {
+        const projectId = args.projectId;
+        items = await ctx.db
+          .query('issues')
+          .withIndex('by_project_parent_last_activity', (q) =>
+            q.eq('projectId', projectId).eq('parentIssueId', parentIssueId),
+          )
+          .order('desc')
+          .take(take);
+      } else if (args.status) {
+        const status = args.status;
+        items = await ctx.db
+          .query('issues')
+          .withIndex('by_status_parent_last_activity', (q) =>
+            q.eq('status', status).eq('parentIssueId', parentIssueId),
+          )
+          .order('desc')
+          .take(take);
+      } else {
+        items = await ctx.db
+          .query('issues')
+          .withIndex('by_parent_last_activity', (q) => q.eq('parentIssueId', parentIssueId))
+          .order('desc')
+          .take(take);
+      }
+    } else if (args.projectId) {
       const projectId = args.projectId;
       items = await ctx.db
         .query('issues')
         .withIndex('by_project_last_activity', (q) => q.eq('projectId', projectId))
         .order('desc')
-        .take(limit);
+        .take(take);
     } else if (args.status) {
       const status = args.status;
       items = await ctx.db
         .query('issues')
         .withIndex('by_status', (q) => q.eq('status', status))
         .order('desc')
-        .take(limit);
+        .take(take);
     } else {
-      items = await ctx.db.query('issues').withIndex('by_last_activity').order('desc').take(limit);
+      items = await ctx.db.query('issues').withIndex('by_last_activity').order('desc').take(take);
     }
 
     if (!includeArchived) {
       items = items.filter((i) => i.archivedAt === null);
     }
     if (args.projectId && args.status) {
-      items = items.filter((i) => i.status === args.status);
+      const status = args.status;
+      items = items.filter((i) => i.status === status);
+    }
+    if (parentIssueId === null) {
+      items = items.filter((i) => (i.parentIssueId ?? null) === null);
     }
 
-    return items;
+    return items.slice(0, limit);
+  },
+});
+
+export const listIssuesByIds = zQuery({
+  args: listIssuesByIdsArgsSchema,
+  handler: async (ctx, args) => {
+    const cache = new Map<string, any>();
+    const ordered: Array<any> = [];
+
+    for (const issueId of args.issueIds) {
+      const key = issueId as unknown as string;
+      if (!cache.has(key)) {
+        cache.set(key, await ctx.db.get('issues', issueId));
+      }
+      const issue = cache.get(key);
+      if (issue) ordered.push(issue);
+    }
+
+    return ordered;
   },
 });
 
@@ -157,6 +233,133 @@ export const getIssue = zQuery({
   },
   handler: async (ctx, args) => {
     return await ctx.db.get('issues', args.issueId);
+  },
+});
+
+export const listFavoriteIssueIds = zQuery({
+  args: listFavoriteIssuesArgsSchema,
+  handler: async (ctx, args) => {
+    const viewerId = await requireViewerId(ctx);
+    const limit = args.limit ?? 200;
+
+    const favorites = await ctx.db
+      .query('issueFavorites')
+      .withIndex('by_user_created', (q) => q.eq('userId', viewerId))
+      .order('desc')
+      .take(limit);
+
+    return favorites.map((f) => f.issueId);
+  },
+});
+
+export const listFavoriteIssues = zQuery({
+  args: listFavoriteIssuesArgsSchema,
+  handler: async (ctx, args) => {
+    const viewerId = await requireViewerId(ctx);
+    const limit = args.limit ?? 50;
+
+    const favorites = await ctx.db
+      .query('issueFavorites')
+      .withIndex('by_user_created', (q) => q.eq('userId', viewerId))
+      .order('desc')
+      .take(limit);
+
+    const issues = await Promise.all(favorites.map((f) => ctx.db.get('issues', f.issueId)));
+    return issues.filter((i): i is NonNullable<typeof i> => i !== null);
+  },
+});
+
+export const toggleIssueFavorite = zMutation({
+  args: toggleIssueFavoriteArgsSchema,
+  handler: async (ctx, args) => {
+    const viewerId = await requireViewerId(ctx);
+    const now = Date.now();
+
+    const issue = await ctx.db.get('issues', args.issueId);
+    if (!issue) {
+      throw new ConvexError('Issue not found');
+    }
+
+    const existing = await ctx.db
+      .query('issueFavorites')
+      .withIndex('by_user_issue', (q) => q.eq('userId', viewerId).eq('issueId', args.issueId))
+      .unique();
+
+    if (existing) {
+      await ctx.db.delete('issueFavorites', existing._id);
+      return { added: false };
+    }
+
+    const favoriteId = await ctx.db.insert('issueFavorites', {
+      issueId: args.issueId,
+      userId: viewerId,
+      createdAt: now,
+    });
+
+    return { added: true, favoriteId };
+  },
+});
+
+export const toggleIssueLink = zMutation({
+  args: toggleIssueLinkArgsSchema,
+  handler: async (ctx, args) => {
+    await requireViewerId(ctx);
+    const now = Date.now();
+
+    if (args.issueId === args.otherIssueId) {
+      throw new ConvexError('Cannot link an issue to itself');
+    }
+
+    const issue = await ctx.db.get('issues', args.issueId);
+    if (!issue) {
+      throw new ConvexError('Issue not found');
+    }
+
+    const other = await ctx.db.get('issues', args.otherIssueId);
+    if (!other) {
+      throw new ConvexError('Other issue not found');
+    }
+
+    if (args.type === 'blocked_by') {
+      const set = new Set(issue.blockedByIssueIds ?? []);
+      const existed = set.has(args.otherIssueId);
+      if (existed) {
+        set.delete(args.otherIssueId);
+      } else {
+        set.add(args.otherIssueId);
+      }
+
+      await ctx.db.patch('issues', args.issueId, {
+        blockedByIssueIds: Array.from(set),
+        lastActivityAt: now,
+      });
+
+      return { added: !existed };
+    }
+
+    const a = new Set(issue.relatedIssueIds ?? []);
+    const b = new Set(other.relatedIssueIds ?? []);
+
+    const existed = a.has(args.otherIssueId) || b.has(args.issueId);
+    if (existed) {
+      a.delete(args.otherIssueId);
+      b.delete(args.issueId);
+    } else {
+      a.add(args.otherIssueId);
+      b.add(args.issueId);
+    }
+
+    await ctx.db.patch('issues', args.issueId, {
+      relatedIssueIds: Array.from(a),
+      lastActivityAt: now,
+    });
+
+    await ctx.db.patch('issues', args.otherIssueId, {
+      relatedIssueIds: Array.from(b),
+      lastActivityAt: now,
+    });
+
+    return { added: !existed };
   },
 });
 
