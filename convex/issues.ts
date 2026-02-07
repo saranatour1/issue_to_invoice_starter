@@ -10,6 +10,7 @@ import {
   listIssuesArgsSchema,
   listIssuesByIdsArgsSchema,
   setIssueAssigneesArgsSchema,
+  setIssueLabelsArgsSchema,
   toggleIssueFavoriteArgsSchema,
   toggleIssueLinkArgsSchema,
   toggleReactionArgsSchema,
@@ -23,6 +24,27 @@ function truncateForNotification(text: string, maxLength = 140) {
   const trimmed = text.trim();
   if (trimmed.length <= maxLength) return trimmed;
   return `${trimmed.slice(0, maxLength - 1)}…`;
+}
+
+function normalizeIssueLabels(labels: Array<string>) {
+  const cleaned: Array<string> = [];
+  const seen = new Set<string>();
+
+  for (const rawLabel of labels) {
+    const trimmed = rawLabel.trim().replace(/\s+/g, ' ');
+    if (!trimmed) continue;
+    const label = trimmed.slice(0, 32);
+    if (!label) continue;
+
+    const key = label.toLowerCase();
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    cleaned.push(label);
+    if (cleaned.length >= 20) break;
+  }
+
+  return cleaned;
 }
 
 async function requireViewerId(ctx: { auth: { getUserIdentity: () => Promise<{ subject: string } | null> } }) {
@@ -127,6 +149,7 @@ export const createIssue = zMutation({
       status: 'open',
       priority: args.priority ?? 'medium',
       estimateMinutes: args.estimateMinutes ?? null,
+      labels: normalizeIssueLabels(args.labels ?? []),
       creatorId: viewerId,
       assigneeIds: [],
       blockedByIssueIds: [],
@@ -525,6 +548,26 @@ export const setIssueAssignees = zMutation({
         body: issue.title,
       });
     }
+
+    return null;
+  },
+});
+
+export const setIssueLabels = zMutation({
+  args: setIssueLabelsArgsSchema,
+  handler: async (ctx, args) => {
+    await requireViewerId(ctx);
+    const now = Date.now();
+
+    const issue = await ctx.db.get('issues', args.issueId);
+    if (!issue) {
+      throw new ConvexError('Issue not found');
+    }
+
+    await ctx.db.patch('issues', args.issueId, {
+      labels: normalizeIssueLabels(args.labels),
+      lastActivityAt: now,
+    });
 
     return null;
   },

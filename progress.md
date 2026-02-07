@@ -33,3 +33,10 @@
 ### 6) Sidebar progress panel
 - Added a dedicated **Updates** panel in the app sidebar.
 - Added a **Progress log** action there that routes directly to `/progress`.
+
+### 7) Issue labels
+- Added labels to issue data in Convex (`issues.labels`) and added API support to update labels on existing issues.
+- Added label input when creating an issue (comma-separated).
+- Added label display on issue list cards, board cards, sub-issues, and issue details.
+- Added label editing inside issue details with a simple save action.
+- Issue search now also matches labels.

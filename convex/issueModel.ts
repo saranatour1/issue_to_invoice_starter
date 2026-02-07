@@ -12,6 +12,7 @@ export type IssuePriority = z.infer<typeof IssuePrioritySchema>;
 
 export const IssueLinkTypeSchema = z.enum(['blocked_by', 'related']);
 export type IssueLinkType = z.infer<typeof IssueLinkTypeSchema>;
+export const IssueLabelSchema = z.string().min(1).max(32);
 
 export const DashboardViewPreferenceSchema = z.enum(['issues', 'time', 'invoices', 'settings']);
 export type DashboardViewPreference = z.infer<typeof DashboardViewPreferenceSchema>;
@@ -52,6 +53,7 @@ export const issueTableFields = {
   status: IssueStatusSchema,
   priority: IssuePrioritySchema,
   estimateMinutes: z.number().int().nonnegative().nullable(),
+  labels: z.array(IssueLabelSchema).max(20).optional(),
 
   creatorId: z.string(),
   assigneeIds: z.array(z.string()),
@@ -150,11 +152,17 @@ export const createIssueArgsSchema = z.object({
   description: z.string().max(50_000).optional(),
   estimateMinutes: z.number().int().nonnegative().optional(),
   priority: IssuePrioritySchema.optional(),
+  labels: z.array(IssueLabelSchema).max(20).optional(),
 });
 
 export const setIssueAssigneesArgsSchema = z.object({
   issueId: IssueIdSchema,
   assigneeIds: z.array(z.string()).max(50),
+});
+
+export const setIssueLabelsArgsSchema = z.object({
+  issueId: IssueIdSchema,
+  labels: z.array(IssueLabelSchema).max(20),
 });
 
 export const listIssuesArgsSchema = z.object({

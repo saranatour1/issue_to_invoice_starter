@@ -125,7 +125,11 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
       items = items.filter((issue) => favoriteIssueIdSet.has(issue._id));
     }
     if (!q) return items;
-    return items.filter((issue) => issue.title.toLowerCase().includes(q));
+    return items.filter(
+      (issue) =>
+        issue.title.toLowerCase().includes(q) ||
+        (issue.labels ?? []).some((label: string) => label.toLowerCase().includes(q)),
+    );
   }, [favoriteIssueIdSet, issueFavoritesOnly, issueSearch, issues.data]);
 
   const issuesByStatus = useMemo(() => {
@@ -277,6 +281,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
   const createIssueFn = useConvexMutation(api.issues.createIssue);
   const setIssueStatusFn = useConvexMutation(api.issues.setIssueStatus);
   const setIssueAssigneesFn = useConvexMutation(api.issues.setIssueAssignees);
+  const setIssueLabelsFn = useConvexMutation(api.issues.setIssueLabels);
   const addIssueCommentFn = useConvexMutation(api.issues.addIssueComment);
   const toggleIssueFavoriteFn = useConvexMutation(api.issues.toggleIssueFavorite);
   const toggleIssueLinkFn = useConvexMutation(api.issues.toggleIssueLink);
@@ -300,6 +305,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
       description?: string;
       estimateMinutes?: number;
       priority?: IssuePriority;
+      labels?: Array<string>;
     }) => createIssueFn(args),
     onSuccess: async (issueId) => {
       await queryClient.invalidateQueries({ queryKey: ['convexQuery'] });
@@ -319,6 +325,13 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 
   const setIssueAssignees = useMutation({
     mutationFn: (args: { issueId: Id<'issues'>; assigneeIds: Array<string> }) => setIssueAssigneesFn(args),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['convexQuery'] });
+    },
+  });
+
+  const setIssueLabels = useMutation({
+    mutationFn: (args: { issueId: Id<'issues'>; labels: Array<string> }) => setIssueLabelsFn(args),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['convexQuery'] });
     },
@@ -373,6 +386,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
   const [newIssueTitle, setNewIssueTitle] = useState('');
   const [newIssueDescription, setNewIssueDescription] = useState('');
   const [newIssueEstimate, setNewIssueEstimate] = useState('');
+  const [newIssueLabels, setNewIssueLabels] = useState('');
   const [newIssuePriority, setNewIssuePriority] = useState<IssuePriority>('medium');
   const [newSubIssueTitle, setNewSubIssueTitle] = useState('');
   const [newSubIssuePriority, setNewSubIssuePriority] = useState<IssuePriority>('medium');
@@ -382,6 +396,15 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
   const [newCommentBody, setNewCommentBody] = useState('');
   const [replyToCommentId, setReplyToCommentId] = useState<Id<'issueComments'> | null>(null);
   const [newTimerDescription, setNewTimerDescription] = useState('');
+  const [issueLabelsInput, setIssueLabelsInput] = useState('');
+
+  useEffect(() => {
+    if (!selectedIssue.data) {
+      setIssueLabelsInput('');
+      return;
+    }
+    setIssueLabelsInput((selectedIssue.data.labels ?? []).join(', '));
+  }, [selectedIssue.data?._id, selectedIssue.data?.labels]);
 
   useEffect(() => {
     if (dashboardView !== 'issues') return;
@@ -454,11 +477,13 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
       description: newIssueDescription.trim() ? newIssueDescription.trim() : undefined,
       estimateMinutes: estimate ?? undefined,
       priority: newIssuePriority,
+      labels: parseIssueLabelsInput(newIssueLabels),
     });
 
     setNewIssueTitle('');
     setNewIssueDescription('');
     setNewIssueEstimate('');
+    setNewIssueLabels('');
     setNewIssuePriority('medium');
   };
 
@@ -487,6 +512,14 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
     await addIssueComment.mutateAsync({ issueId: selectedIssueId, parentCommentId: replyToCommentId, body });
     setNewCommentBody('');
     setReplyToCommentId(null);
+  };
+
+  const handleSaveIssueLabels = async (event: SubmitEvent) => {
+    event.preventDefault();
+    if (!selectedIssueId) return;
+    const labels = parseIssueLabelsInput(issueLabelsInput);
+    await setIssueLabels.mutateAsync({ issueId: selectedIssueId, labels });
+    setIssueLabelsInput(labels.join(', '));
   };
 
   const handleStartGeneralTimer = async (event: SubmitEvent) => {
@@ -1124,6 +1157,12 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                     placeholder="Description (optional)…"
                     className="min-h-20"
                   />
+                  <Input
+                    value={newIssueLabels}
+                    onChange={(e) => setNewIssueLabels(e.target.value)}
+                    placeholder="Labels (comma separated)…"
+                    aria-label="Issue labels"
+                  />
                   {createIssue.error ? (
                     <p className="text-[0.625rem] text-destructive">Couldn’t create issue.</p>
                   ) : null}
@@ -1179,14 +1218,15 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 	                              <StatusIcon status={issue.status} />
 	                            </span>
 	                            <div className="min-w-0 flex-1">
-	                              <div className="flex items-center gap-2">
-	                                <span className="truncate font-medium">{issue.title}</span>
-	                                <PriorityPill priority={issue.priority} />
-	                              </div>
-	                              <div className="mt-1 flex flex-wrap items-center gap-2 text-[0.625rem] text-muted-foreground">
-	                                {projectName ? <span className="truncate">{projectName}</span> : null}
-	                                <span className="tabular-nums">{timeAgo(issue.lastActivityAt, now)}</span>
-	                                {estimate ? <Badge variant="outline">{estimate}</Badge> : null}
+                              <div className="flex items-center gap-2">
+                                <span className="truncate font-medium">{issue.title}</span>
+                                <PriorityPill priority={issue.priority} />
+                              </div>
+                              <IssueLabelsPills labels={issue.labels ?? []} max={2} className="mt-1" />
+                              <div className="mt-1 flex flex-wrap items-center gap-2 text-[0.625rem] text-muted-foreground">
+                                {projectName ? <span className="truncate">{projectName}</span> : null}
+                                <span className="tabular-nums">{timeAgo(issue.lastActivityAt, now)}</span>
+                                {estimate ? <Badge variant="outline">{estimate}</Badge> : null}
 	                              </div>
 	                            </div>
 	
@@ -1286,14 +1326,15 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 		                                    <div className="flex items-start justify-between gap-2">
 		                                      <div className="min-w-0 flex-1">
 		                                        <p className="truncate font-medium">{issue.title}</p>
-		                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[0.625rem] text-muted-foreground">
-		                                          {projectName ? <span className="truncate">{projectName}</span> : null}
-		                                          <span className="tabular-nums">
-		                                            {timeAgo(issue.lastActivityAt, now)}
-		                                          </span>
-		                                          {estimate ? <Badge variant="outline">{estimate}</Badge> : null}
-		                                        </div>
-		                                      </div>
+			                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[0.625rem] text-muted-foreground">
+			                                          {projectName ? <span className="truncate">{projectName}</span> : null}
+			                                          <span className="tabular-nums">
+			                                            {timeAgo(issue.lastActivityAt, now)}
+			                                          </span>
+			                                          {estimate ? <Badge variant="outline">{estimate}</Badge> : null}
+			                                        </div>
+			                                        <IssueLabelsPills labels={issue.labels ?? []} max={2} className="mt-1" />
+			                                      </div>
 		                                      <div className="flex items-center gap-1">
 		                                        <Button
 		                                          size="icon-xs"
@@ -1453,15 +1494,37 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                       </p>
                     ) : null}
 
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <Badge variant="secondary">{labelForPriority(selectedIssue.data.priority)}</Badge>
-                      {selectedIssue.data.estimateMinutes ? (
-                        <Badge variant="outline">{formatEstimate(selectedIssue.data.estimateMinutes)}</Badge>
-                      ) : null}
-                      <AssigneeStack assigneeIds={selectedIssue.data.assigneeIds} userById={userById} />
-                    </div>
-                  </>
-                ) : (
+	                    <div className="mt-3 flex flex-wrap items-center gap-2">
+	                      <Badge variant="secondary">{labelForPriority(selectedIssue.data.priority)}</Badge>
+	                      {selectedIssue.data.estimateMinutes ? (
+	                        <Badge variant="outline">{formatEstimate(selectedIssue.data.estimateMinutes)}</Badge>
+	                      ) : null}
+	                      <AssigneeStack assigneeIds={selectedIssue.data.assigneeIds} userById={userById} />
+	                    </div>
+
+	                    <div className="mt-3 grid gap-2">
+	                      <div className="flex items-center justify-between gap-2">
+	                        <p className="text-xs font-medium">Labels</p>
+	                        <span className="text-[0.625rem] text-muted-foreground">Comma separated</span>
+	                      </div>
+	                      <IssueLabelsPills labels={selectedIssue.data.labels ?? []} />
+	                      <form onSubmit={handleSaveIssueLabels} className="flex items-center gap-2">
+	                        <Input
+	                          value={issueLabelsInput}
+	                          onChange={(e) => setIssueLabelsInput(e.target.value)}
+	                          placeholder="bug, billing, frontend…"
+	                          aria-label="Issue labels"
+	                        />
+	                        <Button size="sm" type="submit" variant="outline" disabled={setIssueLabels.isPending}>
+	                          Save
+	                        </Button>
+	                      </form>
+	                      {setIssueLabels.error ? (
+	                        <p className="text-[0.625rem] text-destructive">Couldn’t update labels.</p>
+	                      ) : null}
+	                    </div>
+	                  </>
+	                ) : (
                   <div className="rounded-lg border border-dashed border-border/60 bg-muted/10 px-3 py-8 text-center text-xs text-muted-foreground">
                     Select an issue to see details.
                   </div>
@@ -1511,6 +1574,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 	                                <span className="tabular-nums">{timeAgo(sub.lastActivityAt, now)}</span>
 	                                {estimate ? <Badge variant="outline">{estimate}</Badge> : null}
 	                              </div>
+	                              <IssueLabelsPills labels={sub.labels ?? []} max={2} className="mt-1" />
 	                            </div>
 	                            <AssigneeStack assigneeIds={sub.assigneeIds} userById={userById} />
 	                          </button>
@@ -1978,6 +2042,33 @@ function PriorityPill({ priority }: { priority: IssuePriority }) {
   return <span className={cn('rounded-md px-1.5 py-0.5 text-[0.625rem] font-medium', tone)}>{label}</span>;
 }
 
+function IssueLabelsPills({
+  labels,
+  max,
+  className,
+}: {
+  labels: Array<string>;
+  max?: number;
+  className?: string;
+}) {
+  if (!labels.length) return null;
+  const visible = typeof max === 'number' ? labels.slice(0, max) : labels;
+  const hidden = labels.length - visible.length;
+
+  return (
+    <div className={cn('flex flex-wrap items-center gap-1', className)}>
+      {visible.map((label, index) => (
+        <Badge key={`${label.toLowerCase()}-${index}`} variant="outline" className="h-5 rounded-md px-1.5 text-[0.625rem]">
+          {label}
+        </Badge>
+      ))}
+      {hidden > 0 ? (
+        <span className="text-[0.625rem] text-muted-foreground">+{hidden}</span>
+      ) : null}
+    </div>
+  );
+}
+
 function labelForPriority(priority: IssuePriority) {
   switch (priority) {
     case 'low':
@@ -2039,6 +2130,26 @@ function parseMinutes(value: string): number | null {
   if (!Number.isFinite(n)) return null;
   if (n < 0) return null;
   return Math.round(n);
+}
+
+function parseIssueLabelsInput(value: string): Array<string> {
+  const labels = value
+    .split(',')
+    .map((label) => label.trim().replace(/\s+/g, ' '))
+    .filter((label) => label.length > 0)
+    .map((label) => label.slice(0, 32));
+
+  const deduped: Array<string> = [];
+  const seen = new Set<string>();
+  for (const label of labels) {
+    const key = label.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(label);
+    if (deduped.length >= 20) break;
+  }
+
+  return deduped;
 }
 
 function formatEstimate(minutes: number) {
