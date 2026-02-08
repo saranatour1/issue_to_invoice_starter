@@ -23,6 +23,9 @@ export type InvoiceCurrency = z.infer<typeof InvoiceCurrencySchema>;
 export const InvoiceStatusSchema = z.enum(['saved', 'sent', 'paid', 'void']);
 export type InvoiceStatus = z.infer<typeof InvoiceStatusSchema>;
 
+export const PlanTierSchema = z.enum(['free', 'pro']);
+export type PlanTier = z.infer<typeof PlanTierSchema>;
+
 export const IssueLayoutPreferenceSchema = z.enum(['list', 'board']);
 export type IssueLayoutPreference = z.infer<typeof IssueLayoutPreferenceSchema>;
 
@@ -126,6 +129,10 @@ export const userTableFields = {
   issueLayoutPreference: IssueLayoutPreferenceSchema.optional(),
   issueStatusFilterPreference: IssueStatusFilterPreferenceSchema.optional(),
   issueFavoritesOnlyPreference: z.boolean().optional(),
+  planTier: PlanTierSchema.optional(),
+  projectCreateCount: z.number().int().nonnegative().optional(),
+  issueCreateCount: z.number().int().nonnegative().optional(),
+  invoiceCreateCount: z.number().int().nonnegative().optional(),
 
   lastSeenAt: z.number().int(),
 };
@@ -247,6 +254,11 @@ export const getUserByUserIdArgsSchema = z.object({
 
 export const listUsersByUserIdsArgsSchema = z.object({
   userIds: z.array(z.string()).max(200),
+});
+
+export const setUserPlanTierArgsSchema = z.object({
+  userId: z.string(),
+  planTier: PlanTierSchema,
 });
 
 export const createProjectArgsSchema = z.object({

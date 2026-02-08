@@ -3,11 +3,17 @@ import { ConvexError } from 'convex/values';
 import { NoOp } from 'convex-helpers/server/customFunctions';
 import { zCustomMutation, zCustomQuery } from 'convex-helpers/server/zod4';
 
-import { getUserByUserIdArgsSchema, listUsersByUserIdsArgsSchema, updateViewerSettingsArgsSchema } from './issueModel';
-import { mutation, query } from './_generated/server';
+import {
+  getUserByUserIdArgsSchema,
+  listUsersByUserIdsArgsSchema,
+  setUserPlanTierArgsSchema,
+  updateViewerSettingsArgsSchema,
+} from './issueModel';
+import { internalMutation, mutation, query } from './_generated/server';
 
 const zQuery = zCustomQuery(query, NoOp);
 const zMutation = zCustomMutation(mutation, NoOp);
+const zInternalMutation = zCustomMutation(internalMutation, NoOp);
 
 async function requireIdentity(ctx: { auth: { getUserIdentity: () => Promise<any> } }) {
   const identity = await ctx.auth.getUserIdentity();
@@ -62,7 +68,13 @@ export const upsertViewer = zMutation({
       return existing._id;
     }
 
-    return await ctx.db.insert('users', patch);
+    return await ctx.db.insert('users', {
+      ...patch,
+      planTier: 'free',
+      projectCreateCount: 0,
+      issueCreateCount: 0,
+      invoiceCreateCount: 0,
+    });
   },
 });
 
@@ -99,6 +111,7 @@ export const getViewerSettings = zQuery({
       issueLayoutPreference: viewer.issueLayoutPreference ?? 'list',
       issueStatusFilterPreference: viewer.issueStatusFilterPreference ?? 'open',
       issueFavoritesOnlyPreference: viewer.issueFavoritesOnlyPreference ?? false,
+      planTier: viewer.planTier ?? 'free',
     };
   },
 });
@@ -142,7 +155,14 @@ export const updateViewerSettings = zMutation({
       return existing._id;
     }
 
-    return await ctx.db.insert('users', { ...basePatch, ...settingsPatch });
+    return await ctx.db.insert('users', {
+      ...basePatch,
+      ...settingsPatch,
+      planTier: 'free',
+      projectCreateCount: 0,
+      issueCreateCount: 0,
+      invoiceCreateCount: 0,
+    });
   },
 });
 
@@ -165,5 +185,25 @@ export const listByUserIds = zQuery({
     );
 
     return users.filter((u): u is NonNullable<typeof u> => u !== null);
+  },
+});
+
+export const setPlanTierInternal = zInternalMutation({
+  args: setUserPlanTierArgsSchema,
+  handler: async (ctx, args) => {
+    const viewer = await ctx.db
+      .query('users')
+      .withIndex('by_userId', (q) => q.eq('userId', args.userId))
+      .unique();
+
+    if (!viewer) {
+      throw new ConvexError('User not found');
+    }
+
+    await ctx.db.patch('users', viewer._id, {
+      planTier: args.planTier,
+    });
+
+    return viewer._id;
   },
 });

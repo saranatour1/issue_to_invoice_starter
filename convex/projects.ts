@@ -9,6 +9,7 @@ import {
   listProjectsArgsSchema,
   removeProjectMemberArgsSchema,
 } from './issueModel';
+import { enforceCreationQuota } from './rateLimits';
 import { mutation, query } from './_generated/server';
 
 const zQuery = zCustomQuery(query, NoOp);
@@ -30,6 +31,7 @@ export const createProject = zMutation({
   args: createProjectArgsSchema,
   handler: async (ctx, args) => {
     const viewerId = await requireViewerId(ctx);
+    await enforceCreationQuota(ctx, { viewerId, action: 'projects' });
     const now = Date.now();
 
     const id = await ctx.db.insert('projects', {

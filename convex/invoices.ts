@@ -9,6 +9,7 @@ import {
   listTimeEntriesForInvoiceArgsSchema,
   updateInvoiceArgsSchema,
 } from './issueModel';
+import { enforceCreationQuota } from './rateLimits';
 import { mutation, query } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 
@@ -92,6 +93,7 @@ export const finalizeFromDraft = zMutation({
   args: finalizeInvoiceFromDraftArgsSchema,
   handler: async (ctx, args) => {
     const viewerId = await requireViewerId(ctx);
+    await enforceCreationQuota(ctx, { viewerId, action: 'invoices' });
     const now = Date.now();
 
     if (args.periodEnd <= args.periodStart) {

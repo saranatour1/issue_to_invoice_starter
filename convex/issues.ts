@@ -15,6 +15,7 @@ import {
   toggleIssueLinkArgsSchema,
   toggleReactionArgsSchema,
 } from './issueModel';
+import { enforceCreationQuota } from './rateLimits';
 import { mutation, query } from './_generated/server';
 
 const zQuery = zCustomQuery(query, NoOp);
@@ -111,6 +112,7 @@ export const createIssue = zMutation({
   args: createIssueArgsSchema,
   handler: async (ctx, args) => {
     const viewerId = await requireViewerId(ctx);
+    await enforceCreationQuota(ctx, { viewerId, action: 'issues' });
     const now = Date.now();
 
     const parentIssueId = args.parentIssueId ?? null;
