@@ -21,6 +21,10 @@ export type InvoiceDraft = {
   createdAt: number;
   projectId: Id<'projects'>;
   projectName: string;
+  clientName?: string | null;
+  clientLocation?: string | null;
+  fromLocation?: string | null;
+  paymentInstructions?: string | null;
   currency: InvoiceCurrency;
   hourlyRateCents: number;
   periodStart: number;
@@ -48,4 +52,3 @@ export type InvoiceListRow =
       status: InvoiceStatus;
       invoiceNumber: string;
     };
-

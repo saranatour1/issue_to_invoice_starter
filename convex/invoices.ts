@@ -133,6 +133,10 @@ export const finalizeFromDraft = zMutation({
       currency: args.currency,
       hourlyRateCents: args.hourlyRateCents,
       notes: args.notes?.trim() ? args.notes.trim() : null,
+      clientName: args.clientName?.trim() ? args.clientName.trim() : null,
+      clientLocation: args.clientLocation?.trim() ? args.clientLocation.trim() : null,
+      fromLocation: args.fromLocation?.trim() ? args.fromLocation.trim() : null,
+      paymentInstructions: args.paymentInstructions?.trim() ? args.paymentInstructions.trim() : null,
       periodStart: args.periodStart,
       periodEnd: args.periodEnd,
       createdAt: now,
@@ -174,6 +178,14 @@ export const updateInvoice = zMutation({
     }
     if (args.hourlyRateCents !== undefined) patch.hourlyRateCents = args.hourlyRateCents;
     if (args.notes !== undefined) patch.notes = args.notes?.trim() ? args.notes.trim() : null;
+    if (args.clientName !== undefined) patch.clientName = args.clientName?.trim() ? args.clientName.trim() : null;
+    if (args.clientLocation !== undefined) {
+      patch.clientLocation = args.clientLocation?.trim() ? args.clientLocation.trim() : null;
+    }
+    if (args.fromLocation !== undefined) patch.fromLocation = args.fromLocation?.trim() ? args.fromLocation.trim() : null;
+    if (args.paymentInstructions !== undefined) {
+      patch.paymentInstructions = args.paymentInstructions?.trim() ? args.paymentInstructions.trim() : null;
+    }
 
     await ctx.db.patch('invoices', args.invoiceId, patch);
     return args.invoiceId;

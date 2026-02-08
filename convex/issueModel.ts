@@ -161,6 +161,10 @@ export const invoiceTableFields = {
   currency: InvoiceCurrencySchema,
   hourlyRateCents: z.number().int().nonnegative(),
   notes: z.string().max(50_000).nullable().optional(),
+  clientName: z.string().max(200).nullable().optional(),
+  clientLocation: z.string().max(2_000).nullable().optional(),
+  fromLocation: z.string().max(2_000).nullable().optional(),
+  paymentInstructions: z.string().max(5_000).nullable().optional(),
   periodStart: z.number().int(),
   periodEnd: z.number().int(),
   createdAt: z.number().int(),
@@ -314,6 +318,10 @@ export const finalizeInvoiceFromDraftArgsSchema = z.object({
   currency: InvoiceCurrencySchema,
   timeEntryIds: z.array(TimeEntryIdSchema).min(1).max(200),
   notes: z.string().max(50_000).optional(),
+  clientName: z.string().max(200).optional(),
+  clientLocation: z.string().max(2_000).optional(),
+  fromLocation: z.string().max(2_000).optional(),
+  paymentInstructions: z.string().max(5_000).optional(),
 });
 
 export const updateInvoiceArgsSchema = z.object({
@@ -321,6 +329,10 @@ export const updateInvoiceArgsSchema = z.object({
   status: InvoiceStatusSchema.optional(),
   hourlyRateCents: z.number().int().nonnegative().optional(),
   notes: z.string().max(50_000).nullable().optional(),
+  clientName: z.string().max(200).nullable().optional(),
+  clientLocation: z.string().max(2_000).nullable().optional(),
+  fromLocation: z.string().max(2_000).nullable().optional(),
+  paymentInstructions: z.string().max(5_000).nullable().optional(),
 });
 
 export const listInvoicesForViewerArgsSchema = z.object({

@@ -58,6 +58,10 @@ export type InvoicesDashboardContextValue = {
   selectedInvoiceEntries: Array<EnrichedTimeEntry>;
 
   deleteLocalDraft: (draftId: string) => void;
+  updateLocalDraft: (
+    draftId: string,
+    patch: Partial<Pick<InvoiceDraft, 'clientName' | 'clientLocation' | 'fromLocation' | 'paymentInstructions' | 'hourlyRateCents'>>,
+  ) => void;
 
   finalizeDraft: {
     mutate: (args: { draft: InvoiceDraft }) => void;
@@ -66,7 +70,16 @@ export type InvoicesDashboardContextValue = {
   };
 
   updateInvoice: {
-    mutate: (args: { invoiceId: Id<'invoices'>; status?: InvoiceStatus; hourlyRateCents?: number; notes?: string | null }) => void;
+    mutate: (args: {
+      invoiceId: Id<'invoices'>;
+      status?: InvoiceStatus;
+      hourlyRateCents?: number;
+      notes?: string | null;
+      clientName?: string | null;
+      clientLocation?: string | null;
+      fromLocation?: string | null;
+      paymentInstructions?: string | null;
+    }) => void;
     isPending: boolean;
     error: unknown;
   };
@@ -83,4 +96,3 @@ export function useInvoicesDashboard() {
 }
 
 export { InvoicesDashboardContext };
-

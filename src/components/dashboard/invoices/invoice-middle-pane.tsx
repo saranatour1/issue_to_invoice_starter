@@ -19,12 +19,16 @@ export function InvoiceMiddlePane() {
   if (selectedDraft) {
     const lineItems = buildLineItems(selectedDraft.timeEntries, selectedDraft.hourlyRateCents);
     const totals = totalsFromLineItems(lineItems);
+    const clientName = selectedDraft.clientName ?? selectedDraft.projectName;
     return (
       <div className="p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm font-semibold">{draftDisplayNumber(selectedDraft.draftId)}</p>
             <p className="mt-1 text-xs text-muted-foreground">{selectedDraft.projectName}</p>
+            {clientName !== selectedDraft.projectName ? (
+              <p className="mt-1 text-xs text-muted-foreground">Client: {clientName}</p>
+            ) : null}
             <p className="mt-1 text-xs text-muted-foreground">{formatPeriod(selectedDraft.periodStart, selectedDraft.periodEnd, timezone)}</p>
           </div>
           <div className="text-right text-xs text-muted-foreground">
@@ -69,12 +73,14 @@ export function InvoiceMiddlePane() {
     const projectName = projects.find((p) => p._id === selectedInvoice.projectId)?.name ?? 'Project';
     const lineItems = buildLineItems(selectedInvoiceEntries, selectedInvoice.hourlyRateCents);
     const totals = totalsFromLineItems(lineItems);
+    const clientName = selectedInvoice.clientName ?? projectName;
     return (
       <div className="p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm font-semibold">{selectedInvoice.invoiceNumber}</p>
             <p className="mt-1 text-xs text-muted-foreground">{projectName}</p>
+            {clientName !== projectName ? <p className="mt-1 text-xs text-muted-foreground">Client: {clientName}</p> : null}
             <p className="mt-1 text-xs text-muted-foreground">{formatPeriod(selectedInvoice.periodStart, selectedInvoice.periodEnd, timezone)}</p>
             <p className="mt-1 text-[0.625rem] text-muted-foreground capitalize">
               Status: {selectedInvoice.status.replace('_', ' ')}
@@ -122,4 +128,3 @@ export function InvoiceMiddlePane() {
     </div>
   );
 }
-

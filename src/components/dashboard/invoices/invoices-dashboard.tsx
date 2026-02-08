@@ -105,11 +105,14 @@ export function InvoicesDashboard({
   useEffect(() => {
     if (!localStorageKey || typeof window === 'undefined') return;
     if (!draftsLoadedRef.current) return;
-    try {
-      window.localStorage.setItem(localStorageKey, JSON.stringify(localDrafts));
-    } catch {
-      // Ignore quota errors.
-    }
+    const id = window.setTimeout(() => {
+      try {
+        window.localStorage.setItem(localStorageKey, JSON.stringify(localDrafts));
+      } catch {
+        // Ignore quota errors.
+      }
+    }, 400);
+    return () => window.clearTimeout(id);
   }, [localDrafts, localStorageKey]);
 
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<InvoiceStatusFilter>('all');
@@ -232,6 +235,10 @@ export function InvoicesDashboard({
         createdAt,
         projectId: targetProjectId,
         projectName,
+        clientName: projectName,
+        clientLocation: null,
+        fromLocation: null,
+        paymentInstructions: null,
         currency: 'USD',
         hourlyRateCents,
         periodStart: start.toMillis(),
@@ -353,6 +360,10 @@ export function InvoicesDashboard({
         hourlyRateCents: args.draft.hourlyRateCents,
         currency: args.draft.currency,
         timeEntryIds: args.draft.timeEntries.map((e) => e._id),
+        clientName: args.draft.clientName ?? undefined,
+        clientLocation: args.draft.clientLocation ?? undefined,
+        fromLocation: args.draft.fromLocation ?? undefined,
+        paymentInstructions: args.draft.paymentInstructions ?? undefined,
       });
     },
     onSuccess: async (invoiceId, variables) => {
@@ -364,8 +375,16 @@ export function InvoicesDashboard({
 
   const updateInvoiceFn = useConvexMutation(api.invoices.updateInvoice);
   const updateInvoice = useMutation({
-    mutationFn: (args: { invoiceId: Id<'invoices'>; status?: InvoiceStatus; hourlyRateCents?: number; notes?: string | null }) =>
-      updateInvoiceFn(args),
+    mutationFn: (args: {
+      invoiceId: Id<'invoices'>;
+      status?: InvoiceStatus;
+      hourlyRateCents?: number;
+      notes?: string | null;
+      clientName?: string | null;
+      clientLocation?: string | null;
+      fromLocation?: string | null;
+      paymentInstructions?: string | null;
+    }) => updateInvoiceFn(args),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['convexQuery'] });
     },
@@ -376,6 +395,18 @@ export function InvoicesDashboard({
     if (selectedDraftId === draftId) {
       closeSelection();
     }
+  };
+
+  const updateLocalDraft = (
+    draftId: string,
+    patch: Partial<Pick<InvoiceDraft, 'clientName' | 'clientLocation' | 'fromLocation' | 'paymentInstructions' | 'hourlyRateCents'>>,
+  ) => {
+    setLocalDrafts((prev) =>
+      prev.map((draft) => {
+        if (draft.draftId !== draftId) return draft;
+        return { ...draft, ...patch };
+      }),
+    );
   };
 
   const ctxValue = useMemo(
@@ -417,6 +448,7 @@ export function InvoicesDashboard({
       selectedInvoiceEntriesLoading: selectedInvoiceEntries.isLoading,
       selectedInvoiceEntries: selectedInvoiceEntries.data ?? [],
       deleteLocalDraft,
+      updateLocalDraft,
       finalizeDraft,
       updateInvoice,
     }),
@@ -449,6 +481,7 @@ export function InvoicesDashboard({
       selectedInvoiceId,
       selectedProjectId,
       timezone,
+      updateLocalDraft,
       updateInvoice,
       visibleRows,
       viewerId,
