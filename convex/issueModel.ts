@@ -26,7 +26,7 @@ export type InvoiceStatus = z.infer<typeof InvoiceStatusSchema>;
 export const PlanTierSchema = z.enum(['free', 'pro']);
 export type PlanTier = z.infer<typeof PlanTierSchema>;
 
-export const IssueLayoutPreferenceSchema = z.enum(['list', 'board']);
+export const IssueLayoutPreferenceSchema = z.enum(['list', 'board', 'table']);
 export type IssueLayoutPreference = z.infer<typeof IssueLayoutPreferenceSchema>;
 
 export const IssueStatusFilterPreferenceSchema = z.enum(['all', 'open', 'in_progress', 'done', 'closed']);

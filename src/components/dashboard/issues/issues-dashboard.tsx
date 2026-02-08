@@ -5,12 +5,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../../../convex/_generated/api';
 import { IssueInfoPane } from './issue-info-pane';
-import { IssuesDashboardContext } from './issues-context';
+import { IssuesDashboardContext, useIssuesDashboard } from './issues-context';
 import { IssuesMiddlePane } from './issues-middle-pane';
 import { IssuesSidebar } from './issues-sidebar';
 import type { ReactNode, SubmitEvent } from 'react';
 import type { Doc, Id } from '../../../../convex/_generated/dataModel';
 import type { EnrichedTimeEntry, IssuePriority, IssueStatus, IssueStatusFilter, IssuesLayout, MinimalUser } from './types';
+import { cn } from '@/lib/utils';
 
 type StartTimerMutation = {
   mutate: (args: { issueId?: Id<'issues'>; projectId?: Id<'projects'>; description?: string }) => void;
@@ -696,18 +697,28 @@ export function IssuesDashboard({
 }
 
 export function IssuesDashboardContent() {
+  const { selectedIssueId } = useIssuesDashboard();
+  const showInfoPane = !!selectedIssueId;
+
   return (
     <div className="min-h-0 flex-1">
       <div className="md:hidden p-4">
         <IssuesSidebar mode="mobile" />
       </div>
-      <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(0,1fr)_360px]">
+      <div
+        className={cn(
+          'grid min-h-0 flex-1 grid-cols-1',
+          showInfoPane ? 'md:grid-cols-[minmax(0,1fr)_360px]' : 'md:grid-cols-1',
+        )}
+      >
         <div className="min-h-0 overflow-auto">
           <IssuesMiddlePane />
         </div>
-        <div className="min-h-0 overflow-auto md:border-l md:border-border/60">
-          <IssueInfoPane />
-        </div>
+        {showInfoPane ? (
+          <div className="min-h-0 overflow-auto md:border-l md:border-border/60">
+            <IssueInfoPane />
+          </div>
+        ) : null}
       </div>
     </div>
   );

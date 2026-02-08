@@ -19,7 +19,7 @@ export function StatusIcon({ status }: { status: IssueStatus }) {
     case 'open':
       return <RiCircleLine className={className} />;
     case 'in_progress':
-      return <RiLoader4Line className={cn(className, 'animate-spin')} />;
+      return <RiLoader4Line className={className} />;
     case 'done':
       return <RiCheckboxCircleLine className={className} />;
     case 'closed':

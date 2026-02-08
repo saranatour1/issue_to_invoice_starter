@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils';
 
 type DashboardViewPreference = 'issues' | 'time' | 'invoices' | 'settings';
-type IssueLayoutPreference = 'list' | 'board';
+type IssueLayoutPreference = 'list' | 'board' | 'table';
 type IssueStatusPreference = 'all' | 'open' | 'in_progress' | 'done' | 'closed';
 
 export function SettingsPanel({ projectId }: { projectId: string }) {
@@ -286,6 +286,7 @@ export function SettingsPanel({ projectId }: { projectId: string }) {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="list">List</SelectItem>
+                      <SelectItem value="table">Table</SelectItem>
                       <SelectItem value="board">Board</SelectItem>
                     </SelectContent>
                   </Select>

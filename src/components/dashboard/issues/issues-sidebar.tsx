@@ -57,16 +57,17 @@ export function IssuesSidebar({ mode = 'sidebar' }: { mode?: 'sidebar' | 'mobile
   } = useIssuesDashboard();
 
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const selectedProjectLabel = selectedProjectId
+    ? projects.find((p) => p._id === selectedProjectId)?.name ?? 'Current project'
+    : 'All issues';
 
   const header = (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
         <p className="truncate text-xs font-medium">Issues</p>
-        <p className="truncate text-[0.625rem] text-muted-foreground">
-          {selectedProjectId ? projects.find((p) => p._id === selectedProjectId)?.name ?? 'Project' : 'All issues'}
-        </p>
+        <p className="truncate text-[0.625rem] text-muted-foreground">{selectedProjectLabel}</p>
       </div>
-      <div className="w-40 shrink-0">
+      <div className="min-w-0 w-40 shrink-0">
         <Select
           value={projectId}
           onValueChange={(value) => {
@@ -74,8 +75,8 @@ export function IssuesSidebar({ mode = 'sidebar' }: { mode?: 'sidebar' | 'mobile
             changeProject(value);
           }}
         >
-          <SelectTrigger size="sm">
-            <SelectValue />
+          <SelectTrigger size="sm" className="w-full max-w-full">
+            <SelectValue>{selectedProjectLabel}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All issues</SelectItem>
@@ -203,6 +204,9 @@ export function IssuesSidebar({ mode = 'sidebar' }: { mode?: 'sidebar' | 'mobile
         <div className="ml-auto flex items-center gap-1">
           <Button size="sm" variant={issuesLayout === 'list' ? 'secondary' : 'outline'} onClick={() => setIssuesLayout('list')}>
             List
+          </Button>
+          <Button size="sm" variant={issuesLayout === 'table' ? 'secondary' : 'outline'} onClick={() => setIssuesLayout('table')}>
+            Table
           </Button>
           <Button
             size="sm"
