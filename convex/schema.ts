@@ -2,6 +2,7 @@ import { defineSchema, defineTable } from 'convex/server';
 import { zodToConvexFields } from 'convex-helpers/server/zod4';
 
 import {
+  invoiceTableFields,
   issueCommentTableFields,
   issueFavoriteTableFields,
   issueReactionTableFields,
@@ -54,7 +55,13 @@ export default defineSchema({
     .index('by_user_ended', ['userId', 'endedAt'])
     .index('by_issue_started', ['issueId', 'startedAt'])
     .index('by_issue_user_started', ['issueId', 'userId', 'startedAt'])
-    .index('by_project_started', ['projectId', 'startedAt']),
+    .index('by_project_started', ['projectId', 'startedAt'])
+    .index('by_user_invoice_started', ['userId', 'invoiceId', 'startedAt']),
+
+  invoices: defineTable(zodToConvexFields(invoiceTableFields))
+    .index('by_creator_created', ['creatorId', 'createdAt'])
+    .index('by_project_created', ['projectId', 'createdAt'])
+    .index('by_creator_status_created', ['creatorId', 'status', 'createdAt']),
 
   notifications: defineTable(zodToConvexFields(notificationTableFields))
     .index('by_user', ['userId'])

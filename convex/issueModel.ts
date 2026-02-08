@@ -17,6 +17,12 @@ export const IssueLabelSchema = z.string().min(1).max(32);
 export const DashboardViewPreferenceSchema = z.enum(['issues', 'time', 'invoices', 'settings']);
 export type DashboardViewPreference = z.infer<typeof DashboardViewPreferenceSchema>;
 
+export const InvoiceCurrencySchema = z.enum(['USD']);
+export type InvoiceCurrency = z.infer<typeof InvoiceCurrencySchema>;
+
+export const InvoiceStatusSchema = z.enum(['saved', 'sent', 'paid', 'void']);
+export type InvoiceStatus = z.infer<typeof InvoiceStatusSchema>;
+
 export const IssueLayoutPreferenceSchema = z.enum(['list', 'board']);
 export type IssueLayoutPreference = z.infer<typeof IssueLayoutPreferenceSchema>;
 
@@ -39,6 +45,7 @@ export const IssueFavoriteIdSchema = zid('issueFavorites');
 export const NotificationIdSchema = zid('notifications');
 export const ProjectIdSchema = zid('projects');
 export const TimeEntryIdSchema = zid('timeEntries');
+export const InvoiceIdSchema = zid('invoices');
 
 export const issueTableFields = {
   source: IssueSourceSchema,
@@ -139,10 +146,28 @@ export const timeEntryTableFields = {
   userId: z.string(),
   issueId: IssueIdSchema.nullable(),
   projectId: ProjectIdSchema.nullable(),
+  invoiceId: InvoiceIdSchema.nullable().optional(),
 
   description: z.string().max(500).nullable(),
   startedAt: z.number().int(),
   endedAt: z.number().int().nullable(),
+};
+
+export const invoiceTableFields = {
+  invoiceNumber: z.string().min(1).max(64),
+  creatorId: z.string(),
+  projectId: ProjectIdSchema,
+  status: InvoiceStatusSchema,
+  currency: InvoiceCurrencySchema,
+  hourlyRateCents: z.number().int().nonnegative(),
+  notes: z.string().max(50_000).nullable().optional(),
+  periodStart: z.number().int(),
+  periodEnd: z.number().int(),
+  createdAt: z.number().int(),
+  updatedAt: z.number().int(),
+  sentAt: z.number().int().nullable().optional(),
+  paidAt: z.number().int().nullable().optional(),
+  voidedAt: z.number().int().nullable().optional(),
 };
 
 export const createIssueArgsSchema = z.object({
@@ -271,5 +296,44 @@ export const listTimeEntriesArgsSchema = z.object({
 
 export const listTimeEntriesForIssueArgsSchema = z.object({
   issueId: IssueIdSchema,
+  limit: z.number().int().min(1).max(200).optional(),
+});
+
+export const listEndedTimeEntriesForViewerInRangeArgsSchema = z.object({
+  projectId: ProjectIdSchema,
+  start: z.number().int(),
+  end: z.number().int(),
+  limit: z.number().int().min(1).max(500).optional(),
+});
+
+export const finalizeInvoiceFromDraftArgsSchema = z.object({
+  projectId: ProjectIdSchema,
+  periodStart: z.number().int(),
+  periodEnd: z.number().int(),
+  hourlyRateCents: z.number().int().nonnegative(),
+  currency: InvoiceCurrencySchema,
+  timeEntryIds: z.array(TimeEntryIdSchema).min(1).max(200),
+  notes: z.string().max(50_000).optional(),
+});
+
+export const updateInvoiceArgsSchema = z.object({
+  invoiceId: InvoiceIdSchema,
+  status: InvoiceStatusSchema.optional(),
+  hourlyRateCents: z.number().int().nonnegative().optional(),
+  notes: z.string().max(50_000).nullable().optional(),
+});
+
+export const listInvoicesForViewerArgsSchema = z.object({
+  projectId: ProjectIdSchema.optional(),
+  status: InvoiceStatusSchema.optional(),
+  limit: z.number().int().min(1).max(200).optional(),
+});
+
+export const getInvoiceArgsSchema = z.object({
+  invoiceId: InvoiceIdSchema,
+});
+
+export const listTimeEntriesForInvoiceArgsSchema = z.object({
+  invoiceId: InvoiceIdSchema,
   limit: z.number().int().min(1).max(200).optional(),
 });

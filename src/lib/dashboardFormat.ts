@@ -1,5 +1,15 @@
 const integerNumberFormat = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 const oneDecimalNumberFormat = new Intl.NumberFormat('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const twoDecimalNumberFormat = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const currencyFormatCache = new Map<string, Intl.NumberFormat>();
+
+function currencyFormatter(currency: string) {
+  const existing = currencyFormatCache.get(currency);
+  if (existing) return existing;
+  const next = new Intl.NumberFormat('en-US', { style: 'currency', currency });
+  currencyFormatCache.set(currency, next);
+  return next;
+}
 
 export function formatInteger(value: number) {
   return integerNumberFormat.format(value);
@@ -7,6 +17,14 @@ export function formatInteger(value: number) {
 
 export function formatOneDecimal(value: number) {
   return oneDecimalNumberFormat.format(value);
+}
+
+export function formatHours(hours: number) {
+  return twoDecimalNumberFormat.format(hours);
+}
+
+export function formatCurrencyFromCents(cents: number, currency: string) {
+  return currencyFormatter(currency).format(cents / 100);
 }
 
 export function formatEstimate(minutes: number) {
@@ -46,4 +64,3 @@ export function shortId(id: string) {
   if (id.length <= 10) return id;
   return `${id.slice(0, 6)}…${id.slice(-4)}`;
 }
-

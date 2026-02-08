@@ -48,6 +48,8 @@ import { SettingsPanel } from '@/components/dashboard/settings-panel';
 import { IssuesDashboard, IssuesDashboardContent } from '@/components/dashboard/issues/issues-dashboard';
 import { IssuesSidebar } from '@/components/dashboard/issues/issues-sidebar';
 import { UserAvatar } from '@/components/dashboard/issues/issue-ui';
+import { InvoicesDashboard, InvoicesDashboardContent } from '@/components/dashboard/invoices/invoices-dashboard';
+import { InvoicesSidebar } from '@/components/dashboard/invoices/invoices-sidebar';
 import { useNow } from '@/hooks/use-now';
 import { formatDuration, formatInteger, shortId } from '@/lib/dashboardFormat';
 import { cn } from '@/lib/utils';
@@ -58,9 +60,17 @@ export type DashboardPageProps = {
   projectId: string;
   view: DashboardView;
   issueIdParam?: string | null;
+  invoiceIdParam?: string | null;
+  draftIdParam?: string | null;
 };
 
-export function DashboardPage({ projectId, view, issueIdParam = null }: DashboardPageProps) {
+export function DashboardPage({
+  projectId,
+  view,
+  issueIdParam = null,
+  invoiceIdParam = null,
+  draftIdParam = null,
+}: DashboardPageProps) {
   const queryClient = useQueryClient();
   const auth = useAuth();
   const navigate = useNavigate();
@@ -213,7 +223,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
         ? labelForTimeViewFilter(timeViewFilter)
         : dashboardView === 'settings'
           ? 'Manage profile, view defaults, and project members'
-          : 'Coming soon';
+          : 'Draft locally, export, then save';
 
   const headerRight = (
     <div className="ml-auto flex items-center gap-2">
@@ -360,27 +370,6 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
     </>
   );
 
-  const invoicesSidebar = (
-    <>
-      <SidebarHeader>
-        <div className="min-w-0">
-          <p className="truncate text-xs font-medium">Invoices</p>
-          <p className="truncate text-[0.625rem] text-muted-foreground">Coming soon</p>
-        </div>
-      </SidebarHeader>
-      <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Views</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenuButton disabled>Drafts</SidebarMenuButton>
-            <SidebarMenuButton disabled>Sent</SidebarMenuButton>
-            <SidebarMenuButton disabled>Clients</SidebarMenuButton>
-          </SidebarGroupContent>
-        </SidebarGroup>
-      </SidebarContent>
-    </>
-  );
-
   const timeContent = (
     <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[1fr_360px]">
       <div className="min-h-0 overflow-auto p-4">
@@ -470,40 +459,6 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
           </Button>
           {startTimer.error ? <p className="text-[0.625rem] text-destructive">Couldn’t start timer.</p> : null}
         </form>
-      </div>
-    </div>
-  );
-
-  const invoicesContent = (
-    <div className="min-h-0 flex-1 overflow-auto p-6">
-      <div className="max-w-2xl">
-        <p className="text-sm font-semibold">Invoices</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Coming soon. Tie issues + tracked time to clients, generate invoice drafts, and email them.
-        </p>
-
-        <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
-            <p className="text-xs font-medium">Draft invoices</p>
-            <p className="mt-1 text-[0.625rem] text-muted-foreground">
-              Group time entries by client/project and review line items.
-            </p>
-          </div>
-          <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
-            <p className="text-xs font-medium">Send via email</p>
-            <p className="mt-1 text-[0.625rem] text-muted-foreground">
-              Planned: Resend integration for sending invoices and reminders.
-            </p>
-          </div>
-          <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
-            <p className="text-xs font-medium">Rates & clients</p>
-            <p className="mt-1 text-[0.625rem] text-muted-foreground">Set hourly rates and map work to the right client.</p>
-          </div>
-          <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
-            <p className="text-xs font-medium">Audit trail</p>
-            <p className="mt-1 text-[0.625rem] text-muted-foreground">Track changes to estimates, status, and assignments.</p>
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -669,10 +624,16 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
               <IssuesDashboardContent />
             </section>
           </IssuesDashboard>
-        ) : (
-          <>
+        ) : dashboardView === 'invoices' ? (
+          <InvoicesDashboard
+            projectId={projectId}
+            invoiceIdParam={invoiceIdParam}
+            draftIdParam={draftIdParam}
+            projects={projects.data ?? []}
+            viewerId={viewerId}
+          >
             <Sidebar collapsible="none" className="hidden w-72 border-r border-sidebar-border/70 md:flex">
-              {dashboardView === 'time' ? timeSidebar : dashboardView === 'settings' ? settingsSidebar : invoicesSidebar}
+              <InvoicesSidebar />
             </Sidebar>
 
             <section className="flex min-w-0 flex-1 flex-col">
@@ -685,7 +646,26 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                 {headerRight}
               </header>
 
-              {dashboardView === 'time' ? timeContent : dashboardView === 'settings' ? <SettingsPanel projectId={projectId} /> : invoicesContent}
+              <InvoicesDashboardContent />
+            </section>
+          </InvoicesDashboard>
+        ) : (
+          <>
+            <Sidebar collapsible="none" className="hidden w-72 border-r border-sidebar-border/70 md:flex">
+              {dashboardView === 'time' ? timeSidebar : settingsSidebar}
+            </Sidebar>
+
+            <section className="flex min-w-0 flex-1 flex-col">
+              <header className="flex h-12 items-center gap-2 border-b border-border/60 px-4">
+                <SidebarTrigger size="icon" variant="outline" title="Toggle sidebar" />
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-medium">{headerTitle}</p>
+                  <p className="truncate text-[0.625rem] text-muted-foreground">{headerSubtitle}</p>
+                </div>
+                {headerRight}
+              </header>
+
+              {dashboardView === 'time' ? timeContent : <SettingsPanel projectId={projectId} />}
             </section>
           </>
         )}

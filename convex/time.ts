@@ -3,6 +3,7 @@ import { NoOp } from 'convex-helpers/server/customFunctions';
 import { zCustomMutation, zCustomQuery } from 'convex-helpers/server/zod4';
 
 import {
+  listEndedTimeEntriesForViewerInRangeArgsSchema,
   listTimeEntriesArgsSchema,
   listTimeEntriesForIssueArgsSchema,
   startTimerArgsSchema,
@@ -160,6 +161,28 @@ export const listForIssueForViewer = zQuery({
       .withIndex('by_issue_user_started', (q) => q.eq('issueId', args.issueId).eq('userId', viewerId))
       .order('desc')
       .take(limit);
+
+    return await Promise.all(entries.map((e) => enrichTimeEntry(ctx, e)));
+  },
+});
+
+export const listEndedForViewerInRange = zQuery({
+  args: listEndedTimeEntriesForViewerInRangeArgsSchema,
+  handler: async (ctx, args) => {
+    const viewerId = await requireViewerId(ctx);
+    const limit = args.limit ?? 200;
+
+    const candidates = await ctx.db
+      .query('timeEntries')
+      .withIndex('by_user_started', (q) => q.eq('userId', viewerId).gte('startedAt', args.start).lt('startedAt', args.end))
+      .order('asc')
+      .take(Math.min(500, limit * 4));
+
+    const entries = candidates
+      .filter((entry) => entry.projectId === args.projectId)
+      .filter((entry) => entry.endedAt !== null)
+      .filter((entry) => entry.invoiceId === undefined || entry.invoiceId === null)
+      .slice(0, limit);
 
     return await Promise.all(entries.map((e) => enrichTimeEntry(ctx, e)));
   },
