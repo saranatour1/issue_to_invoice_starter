@@ -50,11 +50,12 @@ import { IssuesSidebar } from '@/components/dashboard/issues/issues-sidebar';
 import { UserAvatar } from '@/components/dashboard/issues/issue-ui';
 import { InvoicesDashboard, InvoicesDashboardContent } from '@/components/dashboard/invoices/invoices-dashboard';
 import { InvoicesSidebar } from '@/components/dashboard/invoices/invoices-sidebar';
+import { NotificationsDashboard } from '@/components/dashboard/notifications/notifications-dashboard';
 import { useNow } from '@/hooks/use-now';
 import { formatDuration, formatInteger, shortId } from '@/lib/dashboardFormat';
 import { cn } from '@/lib/utils';
 
-export type DashboardView = 'issues' | 'time' | 'invoices' | 'settings';
+export type DashboardView = 'issues' | 'time' | 'invoices' | 'settings' | 'notifications';
 
 export type DashboardPageProps = {
   projectId: string;
@@ -128,8 +129,20 @@ export function DashboardPage({
   const activeTimerElapsedMs =
     activeTimer.data ? Math.max(0, (activeTimer.data.endedAt ?? now) - activeTimer.data.startedAt) : null;
 
-  const unreadNotifications = useQuery(convexQuery(api.notifications.listForViewer, { unreadOnly: true, limit: 20 }));
-  const latestNotifications = useQuery(convexQuery(api.notifications.listForViewer, { limit: 20 }));
+  const notificationScopeProjectId = selectedProjectId ?? undefined;
+  const unreadNotifications = useQuery(
+    convexQuery(api.notifications.listForViewer, {
+      unreadOnly: true,
+      limit: 20,
+      projectId: notificationScopeProjectId,
+    }),
+  );
+  const latestNotifications = useQuery(
+    convexQuery(api.notifications.listForViewer, {
+      limit: 20,
+      projectId: notificationScopeProjectId,
+    }),
+  );
 
   const notificationUserIds = useMemo(() => {
     const ids = new Set<string>();
@@ -205,6 +218,26 @@ export function DashboardPage({
     setNewTimerDescription('');
   };
 
+  const openNotification = async (notification: Doc<'notifications'>) => {
+    if (notification.readAt === null) {
+      try {
+        await markNotificationRead.mutateAsync({ notificationId: notification._id });
+      } catch {
+        // Keep navigation usable even if the read mutation fails transiently.
+      }
+    }
+
+    if (!notification.issueId) return;
+    const targetProjectId = notification.projectId ? (notification.projectId as unknown as string) : 'all';
+    navigate({
+      to: '/$projectId/issues/$issueId',
+      params: {
+        projectId: targetProjectId,
+        issueId: notification.issueId as unknown as string,
+      },
+    });
+  };
+
   const headerTitle =
     dashboardView === 'issues'
       ? selectedProject
@@ -212,6 +245,8 @@ export function DashboardPage({
         : 'All issues'
       : dashboardView === 'time'
         ? 'Time tracking'
+        : dashboardView === 'notifications'
+          ? 'Notifications'
         : dashboardView === 'settings'
           ? 'Settings'
           : 'Invoices';
@@ -221,6 +256,8 @@ export function DashboardPage({
       ? 'Create issues, triage, and track progress'
       : dashboardView === 'time'
         ? labelForTimeViewFilter(timeViewFilter)
+        : dashboardView === 'notifications'
+          ? 'Activity and mentions across your workspace'
         : dashboardView === 'settings'
           ? 'Manage profile, view defaults, and project members'
           : 'Draft locally, export, then save';
@@ -254,8 +291,7 @@ export function DashboardPage({
                 <DropdownMenuItem
                   key={n._id}
                   onClick={() => {
-                    if (!isUnread) return;
-                    markNotificationRead.mutate({ notificationId: n._id });
+                    void openNotification(n);
                   }}
                   className={cn('flex items-start gap-2', isUnread && 'bg-muted/30')}
                 >
@@ -270,6 +306,14 @@ export function DashboardPage({
                 </DropdownMenuItem>
               );
             })}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => {
+                navigate({ to: '/$projectId/notifications', params: { projectId } });
+              }}
+            >
+              View all notifications
+            </DropdownMenuItem>
           </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -649,6 +693,19 @@ export function DashboardPage({
               <InvoicesDashboardContent />
             </section>
           </InvoicesDashboard>
+        ) : dashboardView === 'notifications' ? (
+          <section className="flex min-w-0 flex-1 flex-col">
+            <header className="flex h-12 items-center gap-2 border-b border-border/60 px-4">
+              <SidebarTrigger size="icon" variant="outline" title="Toggle sidebar" />
+              <div className="min-w-0">
+                <p className="truncate text-xs font-medium">{headerTitle}</p>
+                <p className="truncate text-[0.625rem] text-muted-foreground">{headerSubtitle}</p>
+              </div>
+              {headerRight}
+            </header>
+
+            <NotificationsDashboard projectId={projectId} viewerId={viewerId} />
+          </section>
         ) : (
           <>
             <Sidebar collapsible="none" className="hidden w-72 border-r border-sidebar-border/70 md:flex">

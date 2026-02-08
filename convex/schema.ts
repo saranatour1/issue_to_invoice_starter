@@ -65,5 +65,7 @@ export default defineSchema({
 
   notifications: defineTable(zodToConvexFields(notificationTableFields))
     .index('by_user', ['userId'])
-    .index('by_user_read', ['userId', 'readAt']),
+    .index('by_user_read', ['userId', 'readAt'])
+    .index('by_user_project', ['userId', 'projectId'])
+    .index('by_user_project_read', ['userId', 'projectId', 'readAt']),
 });

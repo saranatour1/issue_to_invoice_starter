@@ -16,6 +16,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedProjectIdRouteImport } from './routes/_authenticated/$projectId'
 import { Route as AuthenticatedProjectIdTimeRouteImport } from './routes/_authenticated/$projectId.time'
 import { Route as AuthenticatedProjectIdSettingsRouteImport } from './routes/_authenticated/$projectId.settings'
+import { Route as AuthenticatedProjectIdNotificationsRouteImport } from './routes/_authenticated/$projectId.notifications'
 import { Route as AuthenticatedProjectIdIssuesRouteImport } from './routes/_authenticated/$projectId.issues'
 import { Route as AuthenticatedProjectIdInvoicesRouteImport } from './routes/_authenticated/$projectId.invoices'
 import { Route as AuthenticatedProjectIdTimeIssueIdRouteImport } from './routes/_authenticated/$projectId.time.$issueId'
@@ -57,6 +58,12 @@ const AuthenticatedProjectIdSettingsRoute =
   AuthenticatedProjectIdSettingsRouteImport.update({
     id: '/settings',
     path: '/settings',
+    getParentRoute: () => AuthenticatedProjectIdRoute,
+  } as any)
+const AuthenticatedProjectIdNotificationsRoute =
+  AuthenticatedProjectIdNotificationsRouteImport.update({
+    id: '/notifications',
+    path: '/notifications',
     getParentRoute: () => AuthenticatedProjectIdRoute,
   } as any)
 const AuthenticatedProjectIdIssuesRoute =
@@ -103,6 +110,7 @@ export interface FileRoutesByFullPath {
   '/$projectId': typeof AuthenticatedProjectIdRouteWithChildren
   '/$projectId/invoices': typeof AuthenticatedProjectIdInvoicesRouteWithChildren
   '/$projectId/issues': typeof AuthenticatedProjectIdIssuesRouteWithChildren
+  '/$projectId/notifications': typeof AuthenticatedProjectIdNotificationsRoute
   '/$projectId/settings': typeof AuthenticatedProjectIdSettingsRoute
   '/$projectId/time': typeof AuthenticatedProjectIdTimeRouteWithChildren
   '/$projectId/invoices/$invoiceId': typeof AuthenticatedProjectIdInvoicesInvoiceIdRoute
@@ -117,6 +125,7 @@ export interface FileRoutesByTo {
   '/$projectId': typeof AuthenticatedProjectIdRouteWithChildren
   '/$projectId/invoices': typeof AuthenticatedProjectIdInvoicesRouteWithChildren
   '/$projectId/issues': typeof AuthenticatedProjectIdIssuesRouteWithChildren
+  '/$projectId/notifications': typeof AuthenticatedProjectIdNotificationsRoute
   '/$projectId/settings': typeof AuthenticatedProjectIdSettingsRoute
   '/$projectId/time': typeof AuthenticatedProjectIdTimeRouteWithChildren
   '/$projectId/invoices/$invoiceId': typeof AuthenticatedProjectIdInvoicesInvoiceIdRoute
@@ -133,6 +142,7 @@ export interface FileRoutesById {
   '/_authenticated/$projectId': typeof AuthenticatedProjectIdRouteWithChildren
   '/_authenticated/$projectId/invoices': typeof AuthenticatedProjectIdInvoicesRouteWithChildren
   '/_authenticated/$projectId/issues': typeof AuthenticatedProjectIdIssuesRouteWithChildren
+  '/_authenticated/$projectId/notifications': typeof AuthenticatedProjectIdNotificationsRoute
   '/_authenticated/$projectId/settings': typeof AuthenticatedProjectIdSettingsRoute
   '/_authenticated/$projectId/time': typeof AuthenticatedProjectIdTimeRouteWithChildren
   '/_authenticated/$projectId/invoices/$invoiceId': typeof AuthenticatedProjectIdInvoicesInvoiceIdRoute
@@ -149,6 +159,7 @@ export interface FileRouteTypes {
     | '/$projectId'
     | '/$projectId/invoices'
     | '/$projectId/issues'
+    | '/$projectId/notifications'
     | '/$projectId/settings'
     | '/$projectId/time'
     | '/$projectId/invoices/$invoiceId'
@@ -163,6 +174,7 @@ export interface FileRouteTypes {
     | '/$projectId'
     | '/$projectId/invoices'
     | '/$projectId/issues'
+    | '/$projectId/notifications'
     | '/$projectId/settings'
     | '/$projectId/time'
     | '/$projectId/invoices/$invoiceId'
@@ -178,6 +190,7 @@ export interface FileRouteTypes {
     | '/_authenticated/$projectId'
     | '/_authenticated/$projectId/invoices'
     | '/_authenticated/$projectId/issues'
+    | '/_authenticated/$projectId/notifications'
     | '/_authenticated/$projectId/settings'
     | '/_authenticated/$projectId/time'
     | '/_authenticated/$projectId/invoices/$invoiceId'
@@ -242,6 +255,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/$projectId/settings'
       preLoaderRoute: typeof AuthenticatedProjectIdSettingsRouteImport
+      parentRoute: typeof AuthenticatedProjectIdRoute
+    }
+    '/_authenticated/$projectId/notifications': {
+      id: '/_authenticated/$projectId/notifications'
+      path: '/notifications'
+      fullPath: '/$projectId/notifications'
+      preLoaderRoute: typeof AuthenticatedProjectIdNotificationsRouteImport
       parentRoute: typeof AuthenticatedProjectIdRoute
     }
     '/_authenticated/$projectId/issues': {
@@ -340,6 +360,7 @@ const AuthenticatedProjectIdTimeRouteWithChildren =
 interface AuthenticatedProjectIdRouteChildren {
   AuthenticatedProjectIdInvoicesRoute: typeof AuthenticatedProjectIdInvoicesRouteWithChildren
   AuthenticatedProjectIdIssuesRoute: typeof AuthenticatedProjectIdIssuesRouteWithChildren
+  AuthenticatedProjectIdNotificationsRoute: typeof AuthenticatedProjectIdNotificationsRoute
   AuthenticatedProjectIdSettingsRoute: typeof AuthenticatedProjectIdSettingsRoute
   AuthenticatedProjectIdTimeRoute: typeof AuthenticatedProjectIdTimeRouteWithChildren
 }
@@ -350,6 +371,8 @@ const AuthenticatedProjectIdRouteChildren: AuthenticatedProjectIdRouteChildren =
       AuthenticatedProjectIdInvoicesRouteWithChildren,
     AuthenticatedProjectIdIssuesRoute:
       AuthenticatedProjectIdIssuesRouteWithChildren,
+    AuthenticatedProjectIdNotificationsRoute:
+      AuthenticatedProjectIdNotificationsRoute,
     AuthenticatedProjectIdSettingsRoute: AuthenticatedProjectIdSettingsRoute,
     AuthenticatedProjectIdTimeRoute:
       AuthenticatedProjectIdTimeRouteWithChildren,

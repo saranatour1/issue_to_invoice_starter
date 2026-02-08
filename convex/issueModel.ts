@@ -39,6 +39,7 @@ export const NotificationTypeSchema = z.enum([
   'comment_added',
   'comment_replied',
   'reaction_added',
+  'mentioned',
 ]);
 export type NotificationType = z.infer<typeof NotificationTypeSchema>;
 
@@ -104,6 +105,7 @@ export const notificationTableFields = {
   actorId: z.string().nullable(),
   type: NotificationTypeSchema,
 
+  projectId: ProjectIdSchema.nullable().optional(),
   issueId: IssueIdSchema.nullable(),
   commentId: IssueCommentIdSchema.nullable(),
 
@@ -226,12 +228,17 @@ export const toggleReactionArgsSchema = z.object({
 });
 
 export const listNotificationsArgsSchema = z.object({
+  projectId: ProjectIdSchema.optional(),
   unreadOnly: z.boolean().optional(),
   limit: z.number().int().min(1).max(200).optional(),
 });
 
 export const markNotificationReadArgsSchema = z.object({
   notificationId: NotificationIdSchema,
+});
+
+export const markAllNotificationsReadArgsSchema = z.object({
+  projectId: ProjectIdSchema.optional(),
 });
 
 export const toggleIssueFavoriteArgsSchema = z.object({

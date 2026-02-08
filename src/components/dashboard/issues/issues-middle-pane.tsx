@@ -422,6 +422,7 @@ export function IssuesMiddlePane() {
           placeholder={replyToCommentId ? 'Write a reply…' : 'Write a comment…'}
           className="min-h-20"
         />
+        <p className="text-[0.625rem] text-muted-foreground">Mention teammates with `@userId`.</p>
         <div className="flex items-center justify-between gap-2">
           <div className={cn('text-[0.625rem] text-muted-foreground')}>
             {replyToCommentId ? 'Replying in thread' : 'Commenting on issue'}

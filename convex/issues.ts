@@ -17,6 +17,7 @@ import {
 } from './issueModel';
 import { enforceCreationQuota } from './rateLimits';
 import { mutation, query } from './_generated/server';
+import type { NotificationType } from './issueModel';
 
 const zQuery = zCustomQuery(query, NoOp);
 const zMutation = zCustomMutation(mutation, NoOp);
@@ -48,6 +49,25 @@ function normalizeIssueLabels(labels: Array<string>) {
   return cleaned;
 }
 
+function extractMentionedUserIds(body: string) {
+  const ids = new Set<string>();
+  const regex = /(^|\s)@([A-Za-z0-9][A-Za-z0-9._:-]{0,127})/g;
+  let match = regex.exec(body);
+  while (match) {
+    const userId = match[2];
+    if (userId) ids.add(userId);
+    match = regex.exec(body);
+  }
+  return Array.from(ids);
+}
+
+function notificationPriority(type: NotificationType) {
+  if (type === 'mentioned') return 3;
+  if (type === 'comment_replied') return 2;
+  if (type === 'comment_added') return 1;
+  return 0;
+}
+
 async function requireViewerId(ctx: { auth: { getUserIdentity: () => Promise<{ subject: string } | null> } }) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) {
@@ -64,13 +84,8 @@ async function createNotification(
         value: {
           userId: string;
           actorId: string | null;
-          type:
-            | 'comment_added'
-            | 'comment_replied'
-            | 'reaction_added'
-            | 'issue_created'
-            | 'issue_status_changed'
-            | 'issue_assigned';
+          type: NotificationType;
+          projectId: any;
           issueId: any;
           commentId: any;
           title: string;
@@ -83,13 +98,8 @@ async function createNotification(
   args: {
     userId: string;
     actorId: string | null;
-    type:
-      | 'comment_added'
-      | 'comment_replied'
-      | 'reaction_added'
-      | 'issue_created'
-      | 'issue_status_changed'
-      | 'issue_assigned';
+    type: NotificationType;
+    projectId?: any;
     issueId: any;
     commentId: any;
     title: string;
@@ -100,6 +110,7 @@ async function createNotification(
     userId: args.userId,
     actorId: args.actorId,
     type: args.type,
+    projectId: args.projectId ?? null,
     issueId: args.issueId,
     commentId: args.commentId,
     title: args.title,
@@ -400,9 +411,10 @@ export const addIssueComment = zMutation({
       throw new ConvexError('Issue not found');
     }
 
+    let parentComment: { issueId: typeof args.issueId; authorId: string } | null = null;
     if (parentCommentId) {
-      const parent = await ctx.db.get('issueComments', parentCommentId);
-      if (!parent || parent.issueId !== args.issueId) {
+      parentComment = await ctx.db.get('issueComments', parentCommentId);
+      if (!parentComment || parentComment.issueId !== args.issueId) {
         throw new ConvexError('Parent comment not found for this issue');
       }
     }
@@ -419,27 +431,63 @@ export const addIssueComment = zMutation({
     await ctx.db.patch('issues', args.issueId, { lastActivityAt: now });
 
     // Notifications
-    const recipients = new Set<string>();
+    const recipients = new Map<string, { type: NotificationType; title: string }>();
+    const setRecipient = (userId: string, next: { type: NotificationType; title: string }) => {
+      const existing = recipients.get(userId);
+      if (!existing || notificationPriority(next.type) > notificationPriority(existing.type)) {
+        recipients.set(userId, next);
+      }
+    };
 
+    const baseCommentNotification = parentCommentId
+      ? ({ type: 'comment_replied', title: 'New reply' } as const)
+      : ({ type: 'comment_added', title: 'New comment' } as const);
     if (issue.creatorId !== viewerId) {
-      recipients.add(issue.creatorId);
+      setRecipient(issue.creatorId, baseCommentNotification);
     }
 
-    if (parentCommentId) {
-      const parent = await ctx.db.get('issueComments', parentCommentId);
-      if (parent && parent.authorId !== viewerId) {
-        recipients.add(parent.authorId);
+    if (parentComment && parentComment.authorId !== viewerId) {
+      setRecipient(parentComment.authorId, {
+        type: 'comment_replied',
+        title: 'New reply',
+      });
+    }
+
+    const mentionedUserIds = extractMentionedUserIds(args.body);
+    if (mentionedUserIds.length > 0) {
+      let projectMemberIds: Set<string> | null = null;
+      if (issue.projectId) {
+        const project = await ctx.db.get('projects', issue.projectId);
+        if (project) {
+          projectMemberIds = new Set(project.memberIds);
+        }
+      }
+
+      for (const mentionedUserId of mentionedUserIds) {
+        if (mentionedUserId === viewerId) continue;
+        const mentionedUser = await ctx.db
+          .query('users')
+          .withIndex('by_userId', (q) => q.eq('userId', mentionedUserId))
+          .unique();
+        if (!mentionedUser) continue;
+        if (projectMemberIds && !projectMemberIds.has(mentionedUser.userId)) continue;
+
+        setRecipient(mentionedUser.userId, {
+          type: 'mentioned',
+          title: 'You were mentioned',
+        });
       }
     }
 
-    for (const userId of recipients) {
+    for (const [userId, notification] of recipients) {
       await createNotification(ctx, {
         userId,
         actorId: viewerId,
-        type: parentCommentId ? 'comment_replied' : 'comment_added',
+        type: notification.type,
+        projectId: issue.projectId ?? null,
         issueId: args.issueId,
         commentId,
-        title: parentCommentId ? 'New reply' : 'New comment',
+        title: notification.title,
         body: truncateForNotification(args.body),
       });
     }
@@ -502,6 +550,7 @@ export const setIssueStatus = zMutation({
         userId: issue.creatorId,
         actorId: viewerId,
         type: 'issue_status_changed',
+        projectId: issue.projectId ?? null,
         issueId: args.issueId,
         commentId: null,
         title: 'Issue status updated',
@@ -544,6 +593,7 @@ export const setIssueAssignees = zMutation({
         userId,
         actorId: viewerId,
         type: 'issue_assigned',
+        projectId: issue.projectId ?? null,
         issueId: args.issueId,
         commentId: null,
         title: 'Assigned to an issue',
@@ -580,6 +630,10 @@ export const toggleIssueReaction = zMutation({
   handler: async (ctx, args) => {
     const viewerId = await requireViewerId(ctx);
     const commentId = args.commentId ?? null;
+    const issue = await ctx.db.get('issues', args.issueId);
+    if (!issue) {
+      throw new ConvexError('Issue not found');
+    }
 
     if (commentId) {
       const comment = await ctx.db.get('issueComments', commentId);
@@ -615,6 +669,7 @@ export const toggleIssueReaction = zMutation({
           userId: comment.authorId,
           actorId: viewerId,
           type: 'reaction_added',
+          projectId: issue.projectId ?? null,
           issueId: args.issueId,
           commentId,
           title: 'Reaction on your comment',
@@ -622,12 +677,12 @@ export const toggleIssueReaction = zMutation({
         });
       }
     } else {
-      const issue = await ctx.db.get('issues', args.issueId);
-      if (issue && issue.creatorId !== viewerId) {
+      if (issue.creatorId !== viewerId) {
         await createNotification(ctx, {
           userId: issue.creatorId,
           actorId: viewerId,
           type: 'reaction_added',
+          projectId: issue.projectId ?? null,
           issueId: args.issueId,
           commentId: null,
           title: 'Reaction on your issue',
