@@ -725,7 +725,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                 <div className="min-w-0">
                   <p className="truncate text-xs font-medium">Projects</p>
                   <p className="truncate text-[0.625rem] text-muted-foreground">
-                    {(projects.data ?? []).length} total
+                    {formatInteger((projects.data ?? []).length)} total
                   </p>
                 </div>
               </SidebarHeader>
@@ -759,7 +759,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 	                        Favorites
 	                      </span>
 	                      {favoriteIssueIds.data?.length ? (
-	                        <Badge variant="secondary">{favoriteIssueIds.data.length}</Badge>
+	                        <Badge variant="secondary">{formatInteger(favoriteIssueIds.data.length)}</Badge>
 	                      ) : null}
 	                    </SidebarMenuButton>
 	                  </SidebarGroupContent>
@@ -1043,7 +1043,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                       <RiNotification3Line />
                       {unreadNotifications.data?.length ? (
                         <span className="absolute -right-1 -top-1 inline-flex size-4 items-center justify-center rounded-full bg-primary text-[0.625rem] text-primary-foreground">
-                          {Math.min(9, unreadNotifications.data.length)}
+                          {formatInteger(Math.min(9, unreadNotifications.data.length))}
                         </span>
                       ) : null}
                     </Button>
@@ -1281,7 +1281,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 	                              <p className="text-[0.625rem] font-medium text-muted-foreground">
 	                                {labelForStatus(status)}
 	                              </p>
-	                              <Badge variant="outline">{items.length}</Badge>
+	                              <Badge variant="outline">{formatInteger(items.length)}</Badge>
 	                            </div>
 	                            <div className="mt-2 grid gap-2">
 	                              {items.length === 0 ? (
@@ -1536,7 +1536,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 	                  <div>
 	                    <div className="flex items-center justify-between gap-2">
 	                      <p className="text-xs font-medium">Sub-issues</p>
-	                      <Badge variant="outline">{(subIssues.data ?? []).length}</Badge>
+	                      <Badge variant="outline">{formatInteger((subIssues.data ?? []).length)}</Badge>
 	                    </div>
 
 	                    {subIssues.isLoading ? (
@@ -1880,7 +1880,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 	                    </button>
                   ) : null}
                   <span className="text-[0.625rem] text-muted-foreground">
-                    {timeEntriesQuery.isLoading ? 'Loading…' : `${filteredTimeEntries.length} shown`}
+                    {timeEntriesQuery.isLoading ? 'Loading…' : `${formatInteger(filteredTimeEntries.length)} shown`}
                   </span>
                 </div>
               </div>
@@ -2063,7 +2063,7 @@ function IssueLabelsPills({
         </Badge>
       ))}
       {hidden > 0 ? (
-        <span className="text-[0.625rem] text-muted-foreground">+{hidden}</span>
+        <span className="text-[0.625rem] text-muted-foreground">+{formatInteger(hidden)}</span>
       ) : null}
     </div>
   );
@@ -2153,10 +2153,10 @@ function parseIssueLabelsInput(value: string): Array<string> {
 }
 
 function formatEstimate(minutes: number) {
-  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 60) return `${formatInteger(minutes)}m`;
   const hours = minutes / 60;
-  if (Math.abs(hours - Math.round(hours)) < 1e-9) return `${Math.round(hours)}h`;
-  return `${hours.toFixed(1)}h`;
+  if (Math.abs(hours - Math.round(hours)) < 1e-9) return `${formatInteger(Math.round(hours))}h`;
+  return `${formatOneDecimal(hours)}h`;
 }
 
 function formatDuration(ms: number) {
@@ -2176,13 +2176,24 @@ function timeAgo(timestampMs: number, nowMs: number) {
   const diffMs = nowMs - timestampMs;
   const diffSeconds = Math.floor(diffMs / 1000);
   if (diffSeconds < 5) return 'just now';
-  if (diffSeconds < 60) return `${diffSeconds}s ago`;
+  if (diffSeconds < 60) return `${formatInteger(diffSeconds)}s ago`;
   const diffMinutes = Math.floor(diffSeconds / 60);
-  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  if (diffMinutes < 60) return `${formatInteger(diffMinutes)}m ago`;
   const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffHours < 24) return `${formatInteger(diffHours)}h ago`;
   const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays}d ago`;
+  return `${formatInteger(diffDays)}d ago`;
+}
+
+const integerNumberFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+const oneDecimalNumberFormat = new Intl.NumberFormat(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+function formatInteger(value: number) {
+  return integerNumberFormat.format(value);
+}
+
+function formatOneDecimal(value: number) {
+  return oneDecimalNumberFormat.format(value);
 }
 
 function shortId(id: string) {

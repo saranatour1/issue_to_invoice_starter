@@ -173,9 +173,9 @@ export function SettingsPanel({ projectId }: { projectId: string }) {
   const viewerLabel = viewer.data?.name || viewer.data?.email || viewer.data?.userId || 'Signed in user';
 
   return (
-    <div className="min-h-0 flex-1 overflow-auto p-4">
-      <div className="mx-auto grid w-full max-w-5xl gap-4">
-        <Card id="profile-settings">
+    <div className="h-full flex-1 overflow-auto p-4 w-full">
+      <div className="mx-auto grid w-full  gap-4">
+        <Card id="profile-settings" className='w-full'>
           <CardHeader>
             <CardTitle>Profile settings</CardTitle>
             <CardDescription>Manage your account preferences for this workspace.</CardDescription>
