@@ -56,6 +56,7 @@ export type IssuesDashboardContextValue = {
   };
 
   selectedIssueId: Id<'issues'> | null;
+  selectedIssueLoading: boolean;
   selectedIssue: Doc<'issues'> | null;
 
   newIssueTitle: string;
@@ -150,4 +151,3 @@ export function useIssuesDashboard() {
 }
 
 export { IssuesDashboardContext };
-

@@ -20,6 +20,7 @@ import { formatDuration, formatEstimate, formatInteger, timeAgo } from '@/lib/da
 export function IssueInfoPane() {
   const {
     selectedIssueId,
+    selectedIssueLoading,
     selectedIssue,
     closeIssue,
     viewerId,
@@ -63,11 +64,31 @@ export function IssueInfoPane() {
     issueTimeEntries,
   } = useIssuesDashboard();
 
-  if (!selectedIssueId || !selectedIssue) {
+  if (!selectedIssueId) {
     return (
       <div className="min-h-0 overflow-auto p-4">
         <div className="rounded-lg border border-dashed border-border/60 bg-muted/10 px-3 py-8 text-center text-xs text-muted-foreground">
           Select an issue to see actions and metadata.
+        </div>
+      </div>
+    );
+  }
+
+  if (selectedIssueLoading) {
+    return (
+      <div className="min-h-0 overflow-auto p-4">
+        <div className="rounded-lg border border-dashed border-border/60 bg-muted/10 px-3 py-8 text-center text-xs text-muted-foreground">
+          Loading issue…
+        </div>
+      </div>
+    );
+  }
+
+  if (!selectedIssue) {
+    return (
+      <div className="min-h-0 overflow-auto p-4">
+        <div className="rounded-lg border border-dashed border-border/60 bg-muted/10 px-3 py-8 text-center text-xs text-muted-foreground">
+          Issue not found.
         </div>
       </div>
     );

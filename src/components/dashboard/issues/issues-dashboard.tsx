@@ -1,7 +1,7 @@
 import { useNavigate } from '@tanstack/react-router';
 import { convexQuery, useConvexMutation } from '@convex-dev/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { api } from '../../../../convex/_generated/api';
 import { IssueInfoPane } from './issue-info-pane';
@@ -73,12 +73,28 @@ export function IssuesDashboard({
   const selectedIssueId = routeIssueId;
 
   const viewerSettings = useQuery(convexQuery(api.users.getViewerSettings, {}));
+  const updateViewerSettingsFn = useConvexMutation(api.users.updateViewerSettings);
+  const updateViewerSettings = useMutation({
+    mutationFn: (args: {
+      issueLayoutPreference?: IssuesLayout;
+      issueStatusFilterPreference?: IssueStatusFilter;
+      issueFavoritesOnlyPreference?: boolean;
+    }) => updateViewerSettingsFn(args),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['convexQuery'] });
+    },
+  });
 
   const [issueStatusFilter, setIssueStatusFilter] = useState<IssueStatusFilter>('open');
   const [issuesLayout, setIssuesLayout] = useState<IssuesLayout>('list');
   const [issueSearch, setIssueSearch] = useState('');
   const [issueFavoritesOnly, setIssueFavoritesOnly] = useState(false);
   const [issuePreferencesInitialized, setIssuePreferencesInitialized] = useState(false);
+  const lastSavedIssuePreferences = useRef<{
+    issuesLayout: IssuesLayout;
+    issueStatusFilter: IssueStatusFilter;
+    issueFavoritesOnly: boolean;
+  } | null>(null);
 
   useEffect(() => {
     if (issuePreferencesInitialized || !viewerSettings.data) return;
@@ -89,6 +105,44 @@ export function IssuesDashboard({
     setIssuePreferencesInitialized(true);
   }, [issuePreferencesInitialized, viewerSettings.data]);
 
+  useEffect(() => {
+    if (!issuePreferencesInitialized || !viewerSettings.data) return;
+
+    if (!lastSavedIssuePreferences.current) {
+      lastSavedIssuePreferences.current = { issuesLayout, issueStatusFilter, issueFavoritesOnly };
+      return;
+    }
+
+    const prev = lastSavedIssuePreferences.current;
+    const patch: {
+      issueLayoutPreference?: IssuesLayout;
+      issueStatusFilterPreference?: IssueStatusFilter;
+      issueFavoritesOnlyPreference?: boolean;
+    } = {};
+
+    if (issuesLayout !== prev.issuesLayout) patch.issueLayoutPreference = issuesLayout;
+    if (issueStatusFilter !== prev.issueStatusFilter) patch.issueStatusFilterPreference = issueStatusFilter;
+    if (issueFavoritesOnly !== prev.issueFavoritesOnly) patch.issueFavoritesOnlyPreference = issueFavoritesOnly;
+    if (Object.keys(patch).length === 0) return;
+
+    const next = { issuesLayout, issueStatusFilter, issueFavoritesOnly };
+    lastSavedIssuePreferences.current = next;
+    updateViewerSettings.mutate(patch, {
+      onError: () => {
+        lastSavedIssuePreferences.current = prev;
+      },
+    });
+  }, [
+    issueFavoritesOnly,
+    issuePreferencesInitialized,
+    issueStatusFilter,
+    issuesLayout,
+    updateViewerSettings,
+    viewerSettings.data,
+  ]);
+
+  const shouldFetchPerStatusForBoard = issuesLayout === 'board' && issueStatusFilter === 'all';
+
   const issueListArgs = useMemo(() => {
     const args: { projectId?: Id<'projects'>; status?: IssueStatus; limit: number } = { limit: 50 };
     if (selectedProjectId) args.projectId = selectedProjectId;
@@ -96,7 +150,61 @@ export function IssuesDashboard({
     return args;
   }, [issueStatusFilter, selectedProjectId]);
 
-  const issues = useQuery(convexQuery(api.issues.listIssues, issueListArgs));
+  const issues = useQuery(convexQuery(api.issues.listIssues, shouldFetchPerStatusForBoard ? 'skip' : issueListArgs));
+  const issuesBoardOpen = useQuery(
+    convexQuery(
+      api.issues.listIssues,
+      shouldFetchPerStatusForBoard ? { projectId: selectedProjectId ?? undefined, status: 'open', limit: 50 } : 'skip',
+    ),
+  );
+  const issuesBoardInProgress = useQuery(
+    convexQuery(
+      api.issues.listIssues,
+      shouldFetchPerStatusForBoard
+        ? { projectId: selectedProjectId ?? undefined, status: 'in_progress', limit: 50 }
+        : 'skip',
+    ),
+  );
+  const issuesBoardDone = useQuery(
+    convexQuery(
+      api.issues.listIssues,
+      shouldFetchPerStatusForBoard ? { projectId: selectedProjectId ?? undefined, status: 'done', limit: 50 } : 'skip',
+    ),
+  );
+  const issuesBoardClosed = useQuery(
+    convexQuery(
+      api.issues.listIssues,
+      shouldFetchPerStatusForBoard ? { projectId: selectedProjectId ?? undefined, status: 'closed', limit: 50 } : 'skip',
+    ),
+  );
+
+  const baseIssues = useMemo(() => {
+    if (!shouldFetchPerStatusForBoard) return issues.data ?? [];
+
+    const map = new Map<Id<'issues'>, Doc<'issues'>>();
+    for (const issue of issuesBoardOpen.data ?? []) map.set(issue._id, issue);
+    for (const issue of issuesBoardInProgress.data ?? []) map.set(issue._id, issue);
+    for (const issue of issuesBoardDone.data ?? []) map.set(issue._id, issue);
+    for (const issue of issuesBoardClosed.data ?? []) map.set(issue._id, issue);
+
+    const merged = Array.from(map.values());
+    merged.sort((a, b) => b.lastActivityAt - a.lastActivityAt);
+    return merged;
+  }, [
+    issues.data,
+    issuesBoardClosed.data,
+    issuesBoardDone.data,
+    issuesBoardInProgress.data,
+    issuesBoardOpen.data,
+    shouldFetchPerStatusForBoard,
+  ]);
+
+  const issuesLoading = shouldFetchPerStatusForBoard
+    ? issuesBoardOpen.isLoading ||
+      issuesBoardInProgress.isLoading ||
+      issuesBoardDone.isLoading ||
+      issuesBoardClosed.isLoading
+    : issues.isLoading;
 
   const favoriteIssueIds = useQuery(convexQuery(api.issues.listFavoriteIssueIds, { limit: 200 }));
   const favoriteIssueIdSet = useMemo(
@@ -106,7 +214,7 @@ export function IssuesDashboard({
 
   const filteredIssues = useMemo(() => {
     const q = issueSearch.trim().toLowerCase();
-    let items = issues.data ?? [];
+    let items = baseIssues;
     if (issueFavoritesOnly) {
       items = items.filter((issue) => favoriteIssueIdSet.has(issue._id));
     }
@@ -116,7 +224,7 @@ export function IssuesDashboard({
         issue.title.toLowerCase().includes(q) ||
         (issue.labels ?? []).some((label: string) => label.toLowerCase().includes(q)),
     );
-  }, [favoriteIssueIdSet, issueFavoritesOnly, issueSearch, issues.data]);
+  }, [baseIssues, favoriteIssueIdSet, issueFavoritesOnly, issueSearch]);
 
   const issuesByStatus = useMemo(() => {
     const buckets: Record<IssueStatus, Array<Doc<'issues'>>> = {
@@ -194,12 +302,12 @@ export function IssuesDashboard({
 
   const linkCandidateIssues = useMemo(() => {
     const map = new Map<Id<'issues'>, Doc<'issues'>>();
-    for (const issue of issues.data ?? []) map.set(issue._id, issue);
+    for (const issue of baseIssues) map.set(issue._id, issue);
     for (const issue of subIssues) map.set(issue._id, issue);
     if (selectedIssue.data) map.set(selectedIssue.data._id, selectedIssue.data);
     if (parentIssue.data) map.set(parentIssue.data._id, parentIssue.data);
     return Array.from(map.values());
-  }, [issues.data, parentIssue.data, selectedIssue.data, subIssues]);
+  }, [baseIssues, parentIssue.data, selectedIssue.data, subIssues]);
 
   const blockedByCandidateIssues = useMemo(() => {
     if (!selectedIssueId) return [];
@@ -347,11 +455,40 @@ export function IssuesDashboard({
 
   useEffect(() => {
     if (!selectedIssueId) return;
-    if (selectedIssue.data?.parentIssueId) return;
-    const stillVisible = filteredIssues.some((issue) => issue._id === selectedIssueId);
-    if (stillVisible) return;
+    if (selectedIssue.isLoading) return;
+
+    if (selectedIssue.data === undefined) return;
+    if (selectedIssue.data === null) {
+      navigate({ to: '/$projectId/issues', params: { projectId }, replace: true });
+      return;
+    }
+
+    if (selectedIssue.data.parentIssueId) return;
+
+    const matchesProject = selectedProjectId ? selectedIssue.data.projectId === selectedProjectId : true;
+    const matchesStatus = issueStatusFilter === 'all' ? true : selectedIssue.data.status === issueStatusFilter;
+    const matchesFavorite = issueFavoritesOnly ? favoriteIssueIdSet.has(selectedIssueId) : true;
+
+    const q = issueSearch.trim().toLowerCase();
+    const matchesSearch = !q
+      ? true
+      : selectedIssue.data.title.toLowerCase().includes(q) ||
+        (selectedIssue.data.labels ?? []).some((label: string) => label.toLowerCase().includes(q));
+
+    if (matchesProject && matchesStatus && matchesFavorite && matchesSearch) return;
     navigate({ to: '/$projectId/issues', params: { projectId }, replace: true });
-  }, [filteredIssues, navigate, projectId, selectedIssue.data?.parentIssueId, selectedIssueId]);
+  }, [
+    favoriteIssueIdSet,
+    issueFavoritesOnly,
+    issueSearch,
+    issueStatusFilter,
+    navigate,
+    projectId,
+    selectedIssue.data,
+    selectedIssue.isLoading,
+    selectedIssueId,
+    selectedProjectId,
+  ]);
 
   const handleCreateIssue = async (event: SubmitEvent) => {
     event.preventDefault();
@@ -433,12 +570,13 @@ export function IssuesDashboard({
       setIssueFavoritesOnly,
       issuesLayout,
       setIssuesLayout,
-      issuesLoading: issues.isLoading,
+      issuesLoading,
       filteredIssues,
       issuesByStatus,
       favoriteIssueIdSet,
       toggleIssueFavorite,
       selectedIssueId,
+      selectedIssueLoading: selectedIssueId ? selectedIssue.isLoading : false,
       selectedIssue: selectedIssue.data ?? null,
       newIssueTitle,
       setNewIssueTitle,
@@ -507,12 +645,11 @@ export function IssuesDashboard({
       filteredIssues,
       issueFavoritesOnly,
       issueLabelsInput,
-      issueListArgs,
       issueSearch,
       issueStatusFilter,
       issueTimeEntriesQuery.data,
       issueTimeEntriesQuery.isLoading,
-      issues.isLoading,
+      issuesLoading,
       issuesByStatus,
       issuesLayout,
       newCommentBody,
@@ -535,6 +672,7 @@ export function IssuesDashboard({
       relatedPickerNonce,
       replyToCommentId,
       selectedIssue.data,
+      selectedIssue.isLoading,
       selectedIssueComments.data,
       selectedIssueId,
       selectedProjectId,
@@ -563,11 +701,11 @@ export function IssuesDashboardContent() {
       <div className="md:hidden p-4">
         <IssuesSidebar mode="mobile" />
       </div>
-      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-h-0 overflow-auto">
           <IssuesMiddlePane />
         </div>
-        <div className="min-h-0 overflow-auto lg:border-l lg:border-border/60">
+        <div className="min-h-0 overflow-auto md:border-l md:border-border/60">
           <IssueInfoPane />
         </div>
       </div>

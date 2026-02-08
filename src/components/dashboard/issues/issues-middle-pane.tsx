@@ -1,4 +1,4 @@
-import { RiArrowLeftLine } from '@remixicon/react';
+import { RiArrowLeftLine, RiStarFill, RiStarLine } from '@remixicon/react';
 
 import {
   AssigneeStack,
@@ -25,6 +25,7 @@ export function IssuesMiddlePane() {
     issuesByStatus,
     filteredIssues,
     selectedIssueId,
+    selectedIssueLoading,
     selectedIssue,
     parentIssue,
     projectById,
@@ -109,7 +110,7 @@ export function IssuesMiddlePane() {
                                 disabled={toggleIssueFavorite.isPending}
                                 title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
                               >
-                                {isFavorite ? <span className="text-amber-500">★</span> : <span>☆</span>}
+                                {isFavorite ? <RiStarFill className="size-4 text-amber-500" /> : <RiStarLine className="size-4" />}
                               </Button>
                               <PriorityPill priority={issue.priority} />
                             </div>
@@ -192,11 +193,21 @@ export function IssuesMiddlePane() {
     );
   }
 
+  if (selectedIssueLoading) {
+    return (
+      <div className="min-h-0 overflow-auto p-4">
+        <div className="rounded-lg border border-dashed border-border/60 bg-muted/10 px-3 py-8 text-center text-xs text-muted-foreground">
+          Loading issue…
+        </div>
+      </div>
+    );
+  }
+
   if (!selectedIssue) {
     return (
       <div className="min-h-0 overflow-auto p-4">
         <div className="rounded-lg border border-dashed border-border/60 bg-muted/10 px-3 py-8 text-center text-xs text-muted-foreground">
-          Select an issue from the sidebar to see details.
+          Issue not found.
         </div>
       </div>
     );
@@ -227,7 +238,7 @@ export function IssuesMiddlePane() {
           <p className="text-sm font-semibold">{selectedIssue.title}</p>
           <p className="mt-1 text-xs text-muted-foreground">{projectName}</p>
         </div>
-        <Button size="icon" variant="ghost" className="lg:hidden" onClick={() => closeIssue()} title="Close issue">
+        <Button size="icon" variant="ghost" className="md:hidden" onClick={() => closeIssue()} title="Close issue">
           ✕
         </Button>
       </div>
