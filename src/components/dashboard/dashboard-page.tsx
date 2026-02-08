@@ -4,23 +4,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '@workos/authkit-tanstack-react-start/client';
 import {
-  RiAddLine,
-  RiArrowLeftLine,
-  RiArrowRightSLine,
-  RiCheckboxCircleLine,
-  RiCircleLine,
-  RiCloseCircleLine,
-  RiCloseLine,
   RiFileTextLine,
   RiHashtag,
-  RiLoader4Line,
   RiLogoutBoxLine,
   RiNotification3Line,
   RiPlayLine,
-  RiSearchLine,
   RiSettings3Line,
-  RiStarFill,
-  RiStarLine,
   RiStopLine,
   RiTimerLine,
 } from '@remixicon/react';
@@ -28,6 +17,7 @@ import {
 import { api } from '../../../convex/_generated/api';
 import type { Doc, Id } from '../../../convex/_generated/dataModel';
 import type { CSSProperties, SubmitEvent } from 'react';
+import type { EnrichedTimeEntry, MinimalUser } from '@/components/dashboard/issues/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -40,11 +30,26 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
-import { Separator } from '@/components/ui/separator';
-import { Textarea } from '@/components/ui/textarea';
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+} from '@/components/ui/sidebar';
 import { SettingsPanel } from '@/components/dashboard/settings-panel';
+import { IssuesDashboard, IssuesDashboardContent } from '@/components/dashboard/issues/issues-dashboard';
+import { IssuesSidebar } from '@/components/dashboard/issues/issues-sidebar';
+import { UserAvatar } from '@/components/dashboard/issues/issue-ui';
+import { useNow } from '@/hooks/use-now';
+import { formatDuration, formatInteger, shortId } from '@/lib/dashboardFormat';
 import { cn } from '@/lib/utils';
 
 export type DashboardView = 'issues' | 'time' | 'invoices' | 'settings';
@@ -59,13 +64,14 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
   const queryClient = useQueryClient();
   const auth = useAuth();
   const navigate = useNavigate();
+
   const dashboardView = view;
   const routeIssueId = issueIdParam ? (issueIdParam as Id<'issues'>) : null;
-
-  const selectedIssueId = dashboardView === 'issues' ? routeIssueId : null;
   const timeIssueId = dashboardView === 'time' ? routeIssueId : null;
   const selectedProjectId: Id<'projects'> | null = projectId === 'all' ? null : (projectId as Id<'projects'>);
+
   const [timeViewFilter, setTimeViewFilter] = useState<TimeViewFilter>('all');
+  const [newTimerDescription, setNewTimerDescription] = useState('');
 
   const upsertViewerFn = useConvexMutation(api.users.upsertViewer);
   useEffect(() => {
@@ -73,296 +79,23 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
   }, [upsertViewerFn]);
 
   const viewer = useQuery(convexQuery(api.users.getViewer, {}));
-  const viewerSettings = useQuery(convexQuery(api.users.getViewerSettings, {}));
+  const viewerId = viewer.data?.userId ?? null;
 
   const projects = useQuery(convexQuery(api.projects.listProjects, {}));
-  const projectById = useMemo(() => {
-    const map = new Map<Id<'projects'>, Doc<'projects'>>();
-    for (const project of projects.data ?? []) {
-      map.set(project._id, project);
-    }
-    return map;
-  }, [projects.data]);
-
-  const [issueStatusFilter, setIssueStatusFilter] = useState<IssueStatusFilter>('open');
-  const [issuesLayout, setIssuesLayout] = useState<IssuesLayout>('list');
-  const [issueSearch, setIssueSearch] = useState('');
-  const [issueFavoritesOnly, setIssueFavoritesOnly] = useState(false);
-  const [issuePreferencesInitialized, setIssuePreferencesInitialized] = useState(false);
-
-  useEffect(() => {
-    if (issuePreferencesInitialized || !viewerSettings.data) return;
-    setIssueStatusFilter(viewerSettings.data.issueStatusFilterPreference as IssueStatusFilter);
-    setIssuesLayout(viewerSettings.data.issueLayoutPreference as IssuesLayout);
-    setIssueFavoritesOnly(!!viewerSettings.data.issueFavoritesOnlyPreference);
-    setIssuePreferencesInitialized(true);
-  }, [issuePreferencesInitialized, viewerSettings.data]);
-
-  const issueListArgs = useMemo(() => {
-    const args: { projectId?: Id<'projects'>; status?: IssueStatus; limit: number } = { limit: 50 };
-    if (selectedProjectId) args.projectId = selectedProjectId;
-    if (issueStatusFilter !== 'all') args.status = issueStatusFilter;
-    return args;
-  }, [issueStatusFilter, selectedProjectId]);
-
-  const issues = useQuery(convexQuery(api.issues.listIssues, dashboardView === 'issues' ? issueListArgs : 'skip'));
-
-  const favoriteIssueIds = useQuery(
-    convexQuery(api.issues.listFavoriteIssueIds, dashboardView === 'issues' ? { limit: 200 } : 'skip'),
-  );
-  const favoriteIssueIdSet = useMemo(
-    () => new Set<Id<'issues'>>(favoriteIssueIds.data ?? []),
-    [favoriteIssueIds.data],
-  );
-  const favoriteIssues = useQuery(
-    convexQuery(api.issues.listFavoriteIssues, dashboardView === 'issues' ? { limit: 50 } : 'skip'),
-  );
-
-  const filteredIssues = useMemo(() => {
-    const q = issueSearch.trim().toLowerCase();
-    let items = issues.data ?? [];
-    if (issueFavoritesOnly) {
-      items = items.filter((issue) => favoriteIssueIdSet.has(issue._id));
-    }
-    if (!q) return items;
-    return items.filter(
-      (issue) =>
-        issue.title.toLowerCase().includes(q) ||
-        (issue.labels ?? []).some((label: string) => label.toLowerCase().includes(q)),
-    );
-  }, [favoriteIssueIdSet, issueFavoritesOnly, issueSearch, issues.data]);
-
-  const issuesByStatus = useMemo(() => {
-    const buckets: Record<IssueStatus, Array<Doc<'issues'>>> = {
-      open: [],
-      in_progress: [],
-      done: [],
-      closed: [],
-    };
-
-	    for (const issue of filteredIssues) {
-	      const status = issue.status as IssueStatus;
-	      buckets[status].push(issue);
-	    }
-
-    return buckets;
-  }, [filteredIssues]);
-
-  const issueContextId =
-    routeIssueId && (dashboardView === 'issues' || dashboardView === 'time') ? routeIssueId : null;
-  const selectedIssue = useQuery(
-    convexQuery(
-      api.issues.getIssue,
-      issueContextId ? { issueId: issueContextId } : 'skip',
-    ),
-  );
-
-  const selectedIssueComments = useQuery(
-    convexQuery(
-      api.issues.listIssueCommentsFlat,
-      dashboardView === 'issues' && selectedIssueId ? { issueId: selectedIssueId, limit: 200 } : 'skip',
-    ),
-  );
-
-  const subIssues = useQuery(
-    convexQuery(
-      api.issues.listIssues,
-      dashboardView === 'issues' && selectedIssueId ? { parentIssueId: selectedIssueId, limit: 50 } : 'skip',
-    ),
-  );
-
-  const parentIssue = useQuery(
-    convexQuery(
-      api.issues.getIssue,
-      dashboardView === 'issues' && selectedIssue.data?.parentIssueId
-        ? { issueId: selectedIssue.data.parentIssueId }
-        : 'skip',
-    ),
-  );
-
-  const blockedByIssues = useQuery(
-    convexQuery(
-      api.issues.listIssuesByIds,
-      dashboardView === 'issues' && selectedIssue.data && (selectedIssue.data.blockedByIssueIds ?? []).length
-        ? { issueIds: selectedIssue.data.blockedByIssueIds ?? [] }
-        : 'skip',
-    ),
-  );
-
-  const relatedIssues = useQuery(
-    convexQuery(
-      api.issues.listIssuesByIds,
-      dashboardView === 'issues' && selectedIssue.data && (selectedIssue.data.relatedIssueIds ?? []).length
-        ? { issueIds: selectedIssue.data.relatedIssueIds ?? [] }
-        : 'skip',
-    ),
-  );
+  const selectedProject = useMemo(() => {
+    if (!selectedProjectId) return null;
+    return (projects.data ?? []).find((p) => p._id === selectedProjectId) ?? null;
+  }, [projects.data, selectedProjectId]);
 
   const activeTimer = useQuery(convexQuery(api.time.getActiveForViewer));
   const now = useNow(activeTimer.data ? 1_000 : null);
 
-  const timeEntries = useQuery(
-    convexQuery(api.time.listForViewer, dashboardView === 'time' && !timeIssueId ? { limit: 100 } : 'skip'),
-  );
-  const timeEntriesForIssue = useQuery(
-    convexQuery(
-      api.time.listForIssueForViewer,
-      dashboardView === 'time' && timeIssueId ? { issueId: timeIssueId, limit: 100 } : 'skip',
-    ),
-  );
-  const timeEntriesQuery = timeIssueId ? timeEntriesForIssue : timeEntries;
-  const issueTimeEntries = useQuery(
-    convexQuery(
-      api.time.listForIssueForViewer,
-      dashboardView === 'issues' && selectedIssueId ? { issueId: selectedIssueId, limit: 50 } : 'skip',
-    ),
-  );
-
-  const unreadNotifications = useQuery(convexQuery(api.notifications.listForViewer, { unreadOnly: true, limit: 20 }));
-  const latestNotifications = useQuery(convexQuery(api.notifications.listForViewer, { limit: 20 }));
-
-  const userIdsForLookup = useMemo(() => {
-    const ids = new Set<string>();
-
-    for (const issue of filteredIssues) {
-      ids.add(issue.creatorId);
-      for (const assigneeId of issue.assigneeIds) ids.add(assigneeId);
-    }
-
-    const selected = selectedIssue.data;
-    if (selected) {
-      ids.add(selected.creatorId);
-      for (const assigneeId of selected.assigneeIds) ids.add(assigneeId);
-    }
-
-    for (const subIssue of subIssues.data ?? []) {
-      ids.add(subIssue.creatorId);
-      for (const assigneeId of subIssue.assigneeIds) ids.add(assigneeId);
-    }
-
-    for (const comment of selectedIssueComments.data ?? []) {
-      ids.add(comment.authorId);
-    }
-
-    for (const n of latestNotifications.data ?? []) {
-      if (n.actorId) ids.add(n.actorId);
-      if (n.userId) ids.add(n.userId);
-    }
-
-    if (viewer.data?.userId) ids.add(viewer.data.userId);
-
-    return Array.from(ids);
-  }, [
-    filteredIssues,
-    latestNotifications.data,
-    selectedIssue.data,
-    selectedIssueComments.data,
-    subIssues.data,
-    viewer.data?.userId,
-  ]);
-
-  const users = useQuery(
-    convexQuery(api.users.listByUserIds, userIdsForLookup.length ? { userIds: userIdsForLookup } : 'skip'),
-  );
-
-  const userById = useMemo(() => {
-    const map = new Map<string, MinimalUser>();
-    for (const user of users.data ?? []) {
-      map.set(user.userId, {
-        name: user.name,
-        email: user.email,
-        pictureUrl: user.pictureUrl,
-      });
-    }
-    return map;
-  }, [users.data]);
-
-  const createProjectFn = useConvexMutation(api.projects.createProject);
-  const createIssueFn = useConvexMutation(api.issues.createIssue);
-  const setIssueStatusFn = useConvexMutation(api.issues.setIssueStatus);
-  const setIssueAssigneesFn = useConvexMutation(api.issues.setIssueAssignees);
-  const setIssueLabelsFn = useConvexMutation(api.issues.setIssueLabels);
-  const addIssueCommentFn = useConvexMutation(api.issues.addIssueComment);
-  const toggleIssueFavoriteFn = useConvexMutation(api.issues.toggleIssueFavorite);
-  const toggleIssueLinkFn = useConvexMutation(api.issues.toggleIssueLink);
   const startTimerFn = useConvexMutation(api.time.startTimer);
   const stopTimerFn = useConvexMutation(api.time.stopTimer);
   const markNotificationReadFn = useConvexMutation(api.notifications.markRead);
 
-  const createProject = useMutation({
-    mutationFn: (args: { name: string; description?: string; color?: string }) => createProjectFn(args),
-    onSuccess: async (nextProjectId) => {
-      navigate({ to: '/$projectId/issues', params: { projectId: nextProjectId } });
-      await queryClient.invalidateQueries({ queryKey: ['convexQuery'] });
-    },
-  });
-
-  const createIssue = useMutation({
-    mutationFn: (args: {
-      projectId?: Id<'projects'>;
-      parentIssueId?: Id<'issues'>;
-      title: string;
-      description?: string;
-      estimateMinutes?: number;
-      priority?: IssuePriority;
-      labels?: Array<string>;
-    }) => createIssueFn(args),
-    onSuccess: async (issueId) => {
-      await queryClient.invalidateQueries({ queryKey: ['convexQuery'] });
-      navigate({
-        to: '/$projectId/issues/$issueId',
-        params: { projectId, issueId },
-      });
-    },
-  });
-
-  const setIssueStatus = useMutation({
-    mutationFn: (args: { issueId: Id<'issues'>; status: IssueStatus }) => setIssueStatusFn(args),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['convexQuery'] });
-    },
-  });
-
-  const setIssueAssignees = useMutation({
-    mutationFn: (args: { issueId: Id<'issues'>; assigneeIds: Array<string> }) => setIssueAssigneesFn(args),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['convexQuery'] });
-    },
-  });
-
-  const setIssueLabels = useMutation({
-    mutationFn: (args: { issueId: Id<'issues'>; labels: Array<string> }) => setIssueLabelsFn(args),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['convexQuery'] });
-    },
-  });
-
-  const addIssueComment = useMutation({
-    mutationFn: (args: { issueId: Id<'issues'>; parentCommentId?: Id<'issueComments'> | null; body: string }) =>
-      addIssueCommentFn(args),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['convexQuery'] });
-    },
-  });
-
-  const toggleIssueFavorite = useMutation({
-    mutationFn: (args: { issueId: Id<'issues'> }) => toggleIssueFavoriteFn(args),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['convexQuery'] });
-    },
-  });
-
-  const toggleIssueLink = useMutation({
-    mutationFn: (args: { issueId: Id<'issues'>; otherIssueId: Id<'issues'>; type: 'blocked_by' | 'related' }) =>
-      toggleIssueLinkFn(args),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['convexQuery'] });
-    },
-  });
-
   const startTimer = useMutation({
-    mutationFn: (args: { issueId?: Id<'issues'>; projectId?: Id<'projects'>; description?: string }) =>
-      startTimerFn(args),
+    mutationFn: (args: { issueId?: Id<'issues'>; projectId?: Id<'projects'>; description?: string }) => startTimerFn(args),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['convexQuery'] });
     },
@@ -382,154 +115,33 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
     },
   });
 
-  const [newProjectName, setNewProjectName] = useState('');
-  const [newIssueTitle, setNewIssueTitle] = useState('');
-  const [newIssueDescription, setNewIssueDescription] = useState('');
-  const [newIssueEstimate, setNewIssueEstimate] = useState('');
-  const [newIssueLabels, setNewIssueLabels] = useState('');
-  const [newIssuePriority, setNewIssuePriority] = useState<IssuePriority>('medium');
-  const [newSubIssueTitle, setNewSubIssueTitle] = useState('');
-  const [newSubIssuePriority, setNewSubIssuePriority] = useState<IssuePriority>('medium');
-  const [blockedByPickerNonce, setBlockedByPickerNonce] = useState(0);
-  const [relatedPickerNonce, setRelatedPickerNonce] = useState(0);
+  const activeTimerElapsedMs =
+    activeTimer.data ? Math.max(0, (activeTimer.data.endedAt ?? now) - activeTimer.data.startedAt) : null;
 
-  const [newCommentBody, setNewCommentBody] = useState('');
-  const [replyToCommentId, setReplyToCommentId] = useState<Id<'issueComments'> | null>(null);
-  const [newTimerDescription, setNewTimerDescription] = useState('');
-  const [issueLabelsInput, setIssueLabelsInput] = useState('');
+  const unreadNotifications = useQuery(convexQuery(api.notifications.listForViewer, { unreadOnly: true, limit: 20 }));
+  const latestNotifications = useQuery(convexQuery(api.notifications.listForViewer, { limit: 20 }));
 
-  useEffect(() => {
-    if (!selectedIssue.data) {
-      setIssueLabelsInput('');
-      return;
+  const notificationUserIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const n of latestNotifications.data ?? []) {
+      if (n.actorId) ids.add(n.actorId);
+      if (n.userId) ids.add(n.userId);
     }
-    setIssueLabelsInput((selectedIssue.data.labels ?? []).join(', '));
-  }, [selectedIssue.data?._id, selectedIssue.data?.labels]);
+    if (viewerId) ids.add(viewerId);
+    return Array.from(ids);
+  }, [latestNotifications.data, viewerId]);
 
-  useEffect(() => {
-    if (dashboardView !== 'issues') return;
-    if (!selectedIssueId) return;
-    const stillVisible = filteredIssues.some((issue) => issue._id === selectedIssueId);
-    if (stillVisible) return;
-    navigate({ to: '/$projectId/issues', params: { projectId }, replace: true });
-  }, [dashboardView, filteredIssues, navigate, selectedIssueId]);
-
-  const selectedProject = selectedProjectId ? projectById.get(selectedProjectId) ?? null : null;
-
-  const blockedByIssueIdSet = useMemo(
-    () => new Set<Id<'issues'>>(selectedIssue.data?.blockedByIssueIds ?? []),
-    [selectedIssue.data?.blockedByIssueIds],
-  );
-  const relatedIssueIdSet = useMemo(
-    () => new Set<Id<'issues'>>(selectedIssue.data?.relatedIssueIds ?? []),
-    [selectedIssue.data?.relatedIssueIds],
+  const notificationUsers = useQuery(
+    convexQuery(api.users.listByUserIds, notificationUserIds.length ? { userIds: notificationUserIds } : 'skip'),
   );
 
-  const linkCandidateIssues = useMemo(() => {
-    const map = new Map<Id<'issues'>, Doc<'issues'>>();
-    for (const issue of issues.data ?? []) map.set(issue._id, issue);
-    for (const issue of subIssues.data ?? []) map.set(issue._id, issue);
-    if (selectedIssue.data) map.set(selectedIssue.data._id, selectedIssue.data);
-    if (parentIssue.data) map.set(parentIssue.data._id, parentIssue.data);
-    return Array.from(map.values());
-  }, [issues.data, parentIssue.data, selectedIssue.data, subIssues.data]);
-
-  const blockedByCandidateIssues = useMemo(() => {
-    if (!selectedIssueId) return [];
-    return linkCandidateIssues
-      .filter((issue) => issue._id !== selectedIssueId && !blockedByIssueIdSet.has(issue._id))
-      .slice(0, 50);
-  }, [blockedByIssueIdSet, linkCandidateIssues, selectedIssueId]);
-
-  const relatedCandidateIssues = useMemo(() => {
-    if (!selectedIssueId) return [];
-    return linkCandidateIssues
-      .filter((issue) => issue._id !== selectedIssueId && !relatedIssueIdSet.has(issue._id))
-      .slice(0, 50);
-  }, [linkCandidateIssues, relatedIssueIdSet, selectedIssueId]);
-
-  const favoriteIssuesInScope = useMemo(() => {
-    let items = favoriteIssues.data ?? [];
-    if (selectedProjectId) {
-      items = items.filter((issue) => issue.projectId === selectedProjectId);
+  const notificationUserById = useMemo(() => {
+    const map = new Map<string, MinimalUser>();
+    for (const user of notificationUsers.data ?? []) {
+      map.set(user.userId, { name: user.name, email: user.email, pictureUrl: user.pictureUrl });
     }
-    return items.slice(0, 10);
-  }, [favoriteIssues.data, selectedProjectId]);
-
-  const handleCreateProject = async (event: SubmitEvent) => {
-    event.preventDefault();
-    const name = newProjectName.trim();
-    if (!name) return;
-    await createProject.mutateAsync({ name });
-    setNewProjectName('');
-  };
-
-  const handleCreateIssue = async (event: SubmitEvent) => {
-    event.preventDefault();
-    const title = newIssueTitle.trim();
-    if (!title) return;
-
-    const estimate = parseMinutes(newIssueEstimate);
-
-    await createIssue.mutateAsync({
-      projectId: selectedProjectId ?? undefined,
-      title,
-      description: newIssueDescription.trim() ? newIssueDescription.trim() : undefined,
-      estimateMinutes: estimate ?? undefined,
-      priority: newIssuePriority,
-      labels: parseIssueLabelsInput(newIssueLabels),
-    });
-
-    setNewIssueTitle('');
-    setNewIssueDescription('');
-    setNewIssueEstimate('');
-    setNewIssueLabels('');
-    setNewIssuePriority('medium');
-  };
-
-  const handleCreateSubIssue = async (event: SubmitEvent) => {
-    event.preventDefault();
-    if (!selectedIssueId) return;
-    const title = newSubIssueTitle.trim();
-    if (!title) return;
-
-    await createIssue.mutateAsync({
-      parentIssueId: selectedIssueId,
-      title,
-      priority: newSubIssuePriority,
-    });
-
-    setNewSubIssueTitle('');
-    setNewSubIssuePriority('medium');
-  };
-
-  const handleAddComment = async (event: SubmitEvent) => {
-    event.preventDefault();
-    if (!selectedIssueId) return;
-    const body = newCommentBody.trim();
-    if (!body) return;
-
-    await addIssueComment.mutateAsync({ issueId: selectedIssueId, parentCommentId: replyToCommentId, body });
-    setNewCommentBody('');
-    setReplyToCommentId(null);
-  };
-
-  const handleSaveIssueLabels = async (event: SubmitEvent) => {
-    event.preventDefault();
-    if (!selectedIssueId) return;
-    const labels = parseIssueLabelsInput(issueLabelsInput);
-    await setIssueLabels.mutateAsync({ issueId: selectedIssueId, labels });
-    setIssueLabelsInput(labels.join(', '));
-  };
-
-  const handleStartGeneralTimer = async (event: SubmitEvent) => {
-    event.preventDefault();
-    const description = newTimerDescription.trim();
-    await startTimer.mutateAsync({ description: description.length ? description : undefined });
-    setNewTimerDescription('');
-  };
-
-  const viewerId = viewer.data?.userId ?? null;
+    return map;
+  }, [notificationUsers.data]);
 
   const signedInUser = auth.user;
   const signedInName = signedInUser
@@ -543,8 +155,16 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
       }
     : null;
 
-  const activeTimerElapsedMs =
-    activeTimer.data && now ? Math.max(0, (activeTimer.data.endedAt ?? now) - activeTimer.data.startedAt) : null;
+  const timeEntries = useQuery(
+    convexQuery(api.time.listForViewer, dashboardView === 'time' && !timeIssueId ? { limit: 100 } : 'skip'),
+  );
+  const timeEntriesForIssue = useQuery(
+    convexQuery(
+      api.time.listForIssueForViewer,
+      dashboardView === 'time' && timeIssueId ? { issueId: timeIssueId, limit: 100 } : 'skip',
+    ),
+  );
+  const timeEntriesQuery = timeIssueId ? timeEntriesForIssue : timeEntries;
 
   const filteredTimeEntries = useMemo(() => {
     let items = timeEntriesQuery.data ?? [];
@@ -567,6 +187,326 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
 
     return items;
   }, [dashboardView, selectedProjectId, timeEntriesQuery.data, timeIssueId, timeViewFilter]);
+
+  const handleStartGeneralTimer = async (event: SubmitEvent) => {
+    event.preventDefault();
+    const description = newTimerDescription.trim();
+    await startTimer.mutateAsync({ description: description.length ? description : undefined });
+    setNewTimerDescription('');
+  };
+
+  const headerTitle =
+    dashboardView === 'issues'
+      ? selectedProject
+        ? selectedProject.name
+        : 'All issues'
+      : dashboardView === 'time'
+        ? 'Time tracking'
+        : dashboardView === 'settings'
+          ? 'Settings'
+          : 'Invoices';
+
+  const headerSubtitle =
+    dashboardView === 'issues'
+      ? 'Create issues, triage, and track progress'
+      : dashboardView === 'time'
+        ? labelForTimeViewFilter(timeViewFilter)
+        : dashboardView === 'settings'
+          ? 'Manage profile, view defaults, and project members'
+          : 'Coming soon';
+
+  const headerRight = (
+    <div className="ml-auto flex items-center gap-2">
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <Button size="icon" variant="outline" className="relative">
+              <RiNotification3Line />
+              {unreadNotifications.data?.length ? (
+                <span className="absolute -right-1 -top-1 inline-flex size-4 items-center justify-center rounded-full bg-primary text-[0.625rem] text-primary-foreground">
+                  {formatInteger(Math.min(9, unreadNotifications.data.length))}
+                </span>
+              ) : null}
+            </Button>
+          }
+        />
+        <DropdownMenuContent align="end" className="w-[22rem]">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {(latestNotifications.data ?? []).length === 0 ? (
+              <div className="px-2 py-2 text-xs text-muted-foreground">No notifications yet.</div>
+            ) : null}
+            {(latestNotifications.data ?? []).map((n) => {
+              const actor = n.actorId ? notificationUserById.get(n.actorId) ?? null : null;
+              const isUnread = n.readAt === null;
+              return (
+                <DropdownMenuItem
+                  key={n._id}
+                  onClick={() => {
+                    if (!isUnread) return;
+                    markNotificationRead.mutate({ notificationId: n._id });
+                  }}
+                  className={cn('flex items-start gap-2', isUnread && 'bg-muted/30')}
+                >
+                  <UserAvatar userId={n.actorId} user={actor} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-xs font-medium">{n.title}</span>
+                      {isUnread ? <Badge variant="secondary">New</Badge> : null}
+                    </div>
+                    {n.body ? <p className="mt-0.5 line-clamp-2 text-[0.625rem] text-muted-foreground">{n.body}</p> : null}
+                  </div>
+                </DropdownMenuItem>
+              );
+            })}
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <div className="hidden items-center gap-2 rounded-md border border-border/60 bg-muted/10 px-2 py-1 md:flex">
+        <RiTimerLine className="size-3.5 text-muted-foreground" />
+        {activeTimer.data ? (
+          <>
+            <span className="max-w-[14rem] truncate text-xs">
+              {activeTimer.data.issueTitle ?? activeTimer.data.description ?? 'Timer running'}
+            </span>
+            <span className="text-[0.625rem] text-muted-foreground tabular-nums">
+              {activeTimerElapsedMs !== null ? formatDuration(activeTimerElapsedMs) : '…'}
+            </span>
+            <Button
+              size="icon-xs"
+              variant="ghost"
+              onClick={() => stopTimer.mutate({ timeEntryId: activeTimer.data._id })}
+              disabled={stopTimer.isPending}
+              title="Stop timer"
+            >
+              <RiStopLine />
+            </Button>
+          </>
+        ) : (
+          <span className="text-xs text-muted-foreground">No timer</span>
+        )}
+      </div>
+    </div>
+  );
+
+  const timeSidebar = (
+    <>
+      <SidebarHeader>
+        <div className="min-w-0">
+          <p className="truncate text-xs font-medium">Time tracking</p>
+          <p className="truncate text-[0.625rem] text-muted-foreground">Your entries</p>
+        </div>
+      </SidebarHeader>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Views</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenuButton isActive={timeViewFilter === 'all'} onClick={() => setTimeViewFilter('all')}>
+              All entries
+            </SidebarMenuButton>
+            <SidebarMenuButton isActive={timeViewFilter === 'today'} onClick={() => setTimeViewFilter('today')}>
+              Today
+            </SidebarMenuButton>
+            <SidebarMenuButton isActive={timeViewFilter === 'week'} onClick={() => setTimeViewFilter('week')}>
+              This week
+            </SidebarMenuButton>
+            <SidebarMenuButton
+              isActive={timeViewFilter === 'running'}
+              onClick={() => setTimeViewFilter('running')}
+              disabled={!activeTimer.data}
+              className="justify-between"
+            >
+              <span>Running</span>
+              {activeTimer.data ? <Badge variant="secondary">{formatInteger(1)}</Badge> : null}
+            </SidebarMenuButton>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </>
+  );
+
+  const settingsSidebar = (
+    <>
+      <SidebarHeader>
+        <div className="min-w-0">
+          <p className="truncate text-xs font-medium">Settings</p>
+          <p className="truncate text-[0.625rem] text-muted-foreground">Preferences and project people</p>
+        </div>
+      </SidebarHeader>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Sections</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenuButton onClick={() => document.getElementById('profile-settings')?.scrollIntoView({ behavior: 'smooth' })}>
+              Profile settings
+            </SidebarMenuButton>
+            <SidebarMenuButton onClick={() => document.getElementById('issue-display-settings')?.scrollIntoView({ behavior: 'smooth' })}>
+              Issue defaults
+            </SidebarMenuButton>
+            <SidebarMenuButton onClick={() => document.getElementById('projects-settings')?.scrollIntoView({ behavior: 'smooth' })}>
+              Projects
+            </SidebarMenuButton>
+            <SidebarMenuButton onClick={() => document.getElementById('project-members-settings')?.scrollIntoView({ behavior: 'smooth' })}>
+              Project people
+            </SidebarMenuButton>
+            <SidebarMenuButton onClick={() => document.getElementById('progress-log-settings')?.scrollIntoView({ behavior: 'smooth' })}>
+              Product progress
+            </SidebarMenuButton>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </>
+  );
+
+  const invoicesSidebar = (
+    <>
+      <SidebarHeader>
+        <div className="min-w-0">
+          <p className="truncate text-xs font-medium">Invoices</p>
+          <p className="truncate text-[0.625rem] text-muted-foreground">Coming soon</p>
+        </div>
+      </SidebarHeader>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Views</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenuButton disabled>Drafts</SidebarMenuButton>
+            <SidebarMenuButton disabled>Sent</SidebarMenuButton>
+            <SidebarMenuButton disabled>Clients</SidebarMenuButton>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+    </>
+  );
+
+  const timeContent = (
+    <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[1fr_360px]">
+      <div className="min-h-0 overflow-auto p-4">
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium">Entries</p>
+          <div className="flex items-center gap-3">
+            {timeIssueId ? (
+              <button
+                type="button"
+                className="text-[0.625rem] text-muted-foreground hover:text-foreground"
+                onClick={() => navigate({ to: '/$projectId/time', params: { projectId } })}
+              >
+                Clear issue filter
+              </button>
+            ) : null}
+            <span className="text-[0.625rem] text-muted-foreground">
+              {timeEntriesQuery.isLoading ? 'Loading…' : `${formatInteger(filteredTimeEntries.length)} shown`}
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-3 overflow-hidden rounded-lg border border-border/60">
+          {timeEntriesQuery.isLoading ? <div className="p-4 text-xs text-muted-foreground">Loading time entries…</div> : null}
+          {!timeEntriesQuery.isLoading && filteredTimeEntries.length === 0 ? (
+            <div className="p-4 text-xs text-muted-foreground">No time entries yet.</div>
+          ) : null}
+          <div className="divide-y divide-border/60">
+            {filteredTimeEntries.map((entry) => {
+              const durationMs = entry.endedAt === null ? now - entry.startedAt : entry.endedAt - entry.startedAt;
+              return (
+                <div key={entry._id} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">
+                      {entry.issueTitle ?? entry.projectName ?? entry.description ?? 'Time entry'}
+                    </p>
+                    <p className="mt-0.5 truncate text-[0.625rem] text-muted-foreground">{new Date(entry.startedAt).toLocaleString()}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {entry.endedAt === null ? <Badge variant="secondary">Running</Badge> : null}
+                    <span className="text-[0.625rem] text-muted-foreground tabular-nums">
+                      {formatDuration(Math.max(0, durationMs))}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="border-l border-border/60 p-4">
+        <div className="rounded-lg border border-border/60 bg-muted/10 p-3">
+          <p className="text-xs font-medium">Active timer</p>
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate text-xs">
+                {activeTimer.data?.issueTitle ?? activeTimer.data?.description ?? 'No timer running'}
+              </p>
+              <p className="truncate text-[0.625rem] text-muted-foreground tabular-nums">
+                {activeTimer.data && activeTimerElapsedMs !== null ? formatDuration(activeTimerElapsedMs) : '—'}
+              </p>
+            </div>
+            {activeTimer.data ? (
+              <Button
+                size="icon"
+                variant="outline"
+                onClick={() => stopTimer.mutate({ timeEntryId: activeTimer.data?._id })}
+                disabled={stopTimer.isPending}
+                title="Stop timer"
+              >
+                <RiStopLine />
+              </Button>
+            ) : null}
+          </div>
+        </div>
+
+        <form onSubmit={handleStartGeneralTimer} className="mt-4 grid gap-2">
+          <p className="text-xs font-medium">Start a timer</p>
+          <Input
+            value={newTimerDescription}
+            onChange={(e) => setNewTimerDescription(e.target.value)}
+            placeholder="What are you working on?"
+          />
+          <Button size="sm" disabled={startTimer.isPending} type="submit">
+            <RiPlayLine className="size-4" />
+            Start timer
+          </Button>
+          {startTimer.error ? <p className="text-[0.625rem] text-destructive">Couldn’t start timer.</p> : null}
+        </form>
+      </div>
+    </div>
+  );
+
+  const invoicesContent = (
+    <div className="min-h-0 flex-1 overflow-auto p-6">
+      <div className="max-w-2xl">
+        <p className="text-sm font-semibold">Invoices</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Coming soon. Tie issues + tracked time to clients, generate invoice drafts, and email them.
+        </p>
+
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
+            <p className="text-xs font-medium">Draft invoices</p>
+            <p className="mt-1 text-[0.625rem] text-muted-foreground">
+              Group time entries by client/project and review line items.
+            </p>
+          </div>
+          <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
+            <p className="text-xs font-medium">Send via email</p>
+            <p className="mt-1 text-[0.625rem] text-muted-foreground">
+              Planned: Resend integration for sending invoices and reminders.
+            </p>
+          </div>
+          <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
+            <p className="text-xs font-medium">Rates & clients</p>
+            <p className="mt-1 text-[0.625rem] text-muted-foreground">Set hourly rates and map work to the right client.</p>
+          </div>
+          <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
+            <p className="text-xs font-medium">Audit trail</p>
+            <p className="mt-1 text-[0.625rem] text-muted-foreground">Track changes to estimates, status, and assignments.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <main className="min-h-dvh bg-background text-foreground">
@@ -591,14 +531,14 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                     <SidebarMenuButton
                       isActive={dashboardView === 'issues'}
                       onClick={() => {
-                        if (issueIdParam) {
-                          navigate({
-                            to: '/$projectId/issues/$issueId',
-                            params: { projectId, issueId: issueIdParam },
-                          });
+                        if (dashboardView === 'issues' && routeIssueId) {
+                          navigate({ to: '/$projectId/issues', params: { projectId } });
                           return;
                         }
-
+                        if (routeIssueId) {
+                          navigate({ to: '/$projectId/issues/$issueId', params: { projectId, issueId: routeIssueId } });
+                          return;
+                        }
                         navigate({ to: '/$projectId/issues', params: { projectId } });
                       }}
                     >
@@ -610,14 +550,14 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                     <SidebarMenuButton
                       isActive={dashboardView === 'time'}
                       onClick={() => {
-                        if (issueIdParam) {
-                          navigate({
-                            to: '/$projectId/time/$issueId',
-                            params: { projectId, issueId: issueIdParam },
-                          });
+                        if (dashboardView === 'time' && routeIssueId) {
+                          navigate({ to: '/$projectId/time', params: { projectId } });
                           return;
                         }
-
+                        if (routeIssueId) {
+                          navigate({ to: '/$projectId/time/$issueId', params: { projectId, issueId: routeIssueId } });
+                          return;
+                        }
                         navigate({ to: '/$projectId/time', params: { projectId } });
                       }}
                     >
@@ -626,20 +566,14 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
-                    <SidebarMenuButton
-                      isActive={dashboardView === 'invoices'}
-                      onClick={() => navigate({ to: '/$projectId/invoices', params: { projectId } })}
-                    >
+                    <SidebarMenuButton isActive={dashboardView === 'invoices'} onClick={() => navigate({ to: '/$projectId/invoices', params: { projectId } })}>
                       <RiFileTextLine className="size-4 opacity-70" />
                       <span>Invoices</span>
                       <span className="ml-auto text-[0.625rem] text-muted-foreground">Soon</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                   <SidebarMenuItem>
-                    <SidebarMenuButton
-                      isActive={dashboardView === 'settings'}
-                      onClick={() => navigate({ to: '/$projectId/settings', params: { projectId } })}
-                    >
+                    <SidebarMenuButton isActive={dashboardView === 'settings'} onClick={() => navigate({ to: '/$projectId/settings', params: { projectId } })}>
                       <RiSettings3Line className="size-4 opacity-70" />
                       <span>Settings</span>
                     </SidebarMenuButton>
@@ -651,13 +585,7 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
             <SidebarGroup>
               <SidebarGroupLabel>Shortcuts</SidebarGroupLabel>
               <SidebarGroupContent>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full justify-start"
-                  onClick={() => startTimer.mutate({})}
-                  disabled={startTimer.isPending}
-                >
+                <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => startTimer.mutate({})} disabled={startTimer.isPending}>
                   <RiPlayLine className="size-4" />
                   Start timer
                 </Button>
@@ -706,1398 +634,67 @@ export function DashboardPage({ projectId, view, issueIdParam = null }: Dashboar
                   {viewerId ? shortId(viewerId) : signedInUser?.id ? shortId(signedInUser.id) : '…'}
                 </p>
               </div>
-              <Button
-                size="icon-xs"
-                variant="ghost"
-                onClick={() => void auth.signOut({ returnTo: '/' })}
-                title="Sign out"
-              >
+              <Button size="icon-xs" variant="ghost" onClick={() => void auth.signOut({ returnTo: '/' })} title="Sign out">
                 <RiLogoutBoxLine />
               </Button>
             </div>
           </SidebarFooter>
         </Sidebar>
 
-        <Sidebar collapsible="none" className="hidden md:flex w-72 border-r border-sidebar-border/70">
-		          {dashboardView === 'issues' ? (
-		            <>
-              <SidebarHeader>
+        {dashboardView === 'issues' ? (
+          <IssuesDashboard
+            projectId={projectId}
+            issueIdParam={issueIdParam}
+            projects={projects.data ?? []}
+            viewerId={viewerId}
+            now={now}
+            activeTimer={(activeTimer.data ?? null) as EnrichedTimeEntry | null}
+            startTimer={startTimer}
+            stopTimer={stopTimer}
+          >
+            <Sidebar collapsible="none" className="hidden w-72 border-r border-sidebar-border/70 md:flex">
+              <IssuesSidebar />
+            </Sidebar>
+
+            <section className="flex min-w-0 flex-1 flex-col">
+              <header className="flex h-12 items-center gap-2 border-b border-border/60 px-4">
+                <SidebarTrigger size="icon" variant="outline" title="Toggle sidebar" />
                 <div className="min-w-0">
-                  <p className="truncate text-xs font-medium">Projects</p>
-                  <p className="truncate text-[0.625rem] text-muted-foreground">
-                    {formatInteger((projects.data ?? []).length)} total
-                  </p>
+                  <p className="truncate text-xs font-medium">{headerTitle}</p>
+                  <p className="truncate text-[0.625rem] text-muted-foreground">{headerSubtitle}</p>
                 </div>
-              </SidebarHeader>
+                {headerRight}
+              </header>
 
-	              <SidebarContent>
-	                <SidebarGroup>
-	                  <SidebarGroupLabel>Views</SidebarGroupLabel>
-	                  <SidebarGroupContent>
-	                    <SidebarMenuButton
-	                      isActive={projectId === 'all' && !issueFavoritesOnly}
-	                      onClick={() => {
-	                        setIssueFavoritesOnly(false);
-	                        navigate({ to: '/$projectId/issues', params: { projectId: 'all' } });
-	                      }}
-	                    >
-	                      All issues
-	                    </SidebarMenuButton>
-	                    <SidebarMenuButton
-	                      isActive={issueFavoritesOnly}
-	                      onClick={() => {
-	                        setIssueFavoritesOnly((prev) => {
-	                          const next = !prev;
-	                          if (next) setIssueStatusFilter('all');
-	                          return next;
-	                        });
-	                      }}
-	                      className="justify-between"
-	                    >
-	                      <span className="inline-flex items-center gap-2">
-	                        <RiStarLine className="size-4 opacity-70" />
-	                        Favorites
-	                      </span>
-	                      {favoriteIssueIds.data?.length ? (
-	                        <Badge variant="secondary">{formatInteger(favoriteIssueIds.data.length)}</Badge>
-	                      ) : null}
-	                    </SidebarMenuButton>
-	                  </SidebarGroupContent>
-	                </SidebarGroup>
+              <IssuesDashboardContent />
+            </section>
+          </IssuesDashboard>
+        ) : (
+          <>
+            <Sidebar collapsible="none" className="hidden w-72 border-r border-sidebar-border/70 md:flex">
+              {dashboardView === 'time' ? timeSidebar : dashboardView === 'settings' ? settingsSidebar : invoicesSidebar}
+            </Sidebar>
 
-	                <SidebarGroup>
-	                  <SidebarGroupLabel>Favorites</SidebarGroupLabel>
-	                  <SidebarGroupContent>
-	                    {favoriteIssues.isLoading ? (
-	                      <p className="text-xs text-muted-foreground">Loading…</p>
-	                    ) : null}
-	                    {!favoriteIssues.isLoading && favoriteIssuesInScope.length === 0 ? (
-	                      <p className="text-xs text-muted-foreground">No favorites yet.</p>
-	                    ) : null}
-	                    {favoriteIssuesInScope.map((issue) => (
-	                      <SidebarMenuButton
-	                        key={issue._id}
-	                        onClick={() =>
-	                          navigate({
-	                            to: '/$projectId/issues/$issueId',
-	                            params: { projectId, issueId: issue._id },
-	                          })
-	                        }
-	                        className="justify-between"
-	                      >
-	                        <span className="inline-flex min-w-0 items-center gap-2">
-	                          <span className="text-muted-foreground" aria-hidden>
-	                            <StatusIcon status={issue.status as IssueStatus} />
-	                          </span>
-	                          <span className="truncate">{issue.title}</span>
-	                        </span>
-	                        <RiStarFill className="size-3.5 text-amber-500 opacity-90" />
-	                      </SidebarMenuButton>
-	                    ))}
-	                  </SidebarGroupContent>
-	                </SidebarGroup>
-
-	                <SidebarGroup>
-	                  <SidebarGroupLabel>Projects</SidebarGroupLabel>
-	                  <SidebarGroupContent>
-	                    {(projects.data ?? []).map((project) => {
-	                      const selected = selectedProjectId === project._id;
-	                      return (
-	                        <SidebarMenuButton
-	                          key={project._id}
-	                          isActive={selected}
-	                          onClick={() => {
-	                            setIssueFavoritesOnly(false);
-	                            navigate({ to: '/$projectId/issues', params: { projectId: project._id } });
-	                          }}
-	                          className="justify-between"
-	                        >
-	                          <span className="inline-flex min-w-0 items-center gap-2">
-	                            <span
-	                              className="size-2 rounded-full border border-sidebar-border/70"
-	                              style={{ backgroundColor: project.color ?? 'transparent' }}
-	                              aria-hidden
-	                            />
-	                            <span className="truncate">{project.name}</span>
-	                          </span>
-	                          <RiArrowRightSLine className="size-3.5 opacity-60" />
-	                        </SidebarMenuButton>
-	                      );
-	                    })}
-	                  </SidebarGroupContent>
-	                </SidebarGroup>
-
-	                <SidebarGroup>
-	                  <SidebarGroupLabel>New project</SidebarGroupLabel>
-	                  <SidebarGroupContent>
-		                    <form onSubmit={handleCreateProject} className="flex items-center gap-2">
-		                      <Input
-		                        value={newProjectName}
-		                        onChange={(e) => setNewProjectName(e.target.value)}
-		                        placeholder="New project…"
-		                        aria-label="New project name"
-		                      />
-		                      <Button size="icon" variant="outline" disabled={createProject.isPending} type="submit">
-		                        <RiAddLine />
-		                      </Button>
-		                    </form>
-	                    {createProject.error ? (
-	                      <p className="mt-2 text-[0.625rem] text-destructive">Couldn’t create project.</p>
-	                    ) : null}
-	                  </SidebarGroupContent>
-	                </SidebarGroup>
-	              </SidebarContent>
-            </>
-	          ) : dashboardView === 'time' ? (
-	            <>
-              <SidebarHeader>
+            <section className="flex min-w-0 flex-1 flex-col">
+              <header className="flex h-12 items-center gap-2 border-b border-border/60 px-4">
+                <SidebarTrigger size="icon" variant="outline" title="Toggle sidebar" />
                 <div className="min-w-0">
-                  <p className="truncate text-xs font-medium">Time tracking</p>
-                  <p className="truncate text-[0.625rem] text-muted-foreground">Your entries</p>
+                  <p className="truncate text-xs font-medium">{headerTitle}</p>
+                  <p className="truncate text-[0.625rem] text-muted-foreground">{headerSubtitle}</p>
                 </div>
-              </SidebarHeader>
+                {headerRight}
+              </header>
 
-              <SidebarContent>
-                <SidebarGroup>
-                  <SidebarGroupLabel>Views</SidebarGroupLabel>
-                  <SidebarGroupContent>
-                    <SidebarMenuButton isActive={timeViewFilter === 'all'} onClick={() => setTimeViewFilter('all')}>
-                      All entries
-                    </SidebarMenuButton>
-                    <SidebarMenuButton isActive={timeViewFilter === 'today'} onClick={() => setTimeViewFilter('today')}>
-                      Today
-                    </SidebarMenuButton>
-                    <SidebarMenuButton isActive={timeViewFilter === 'week'} onClick={() => setTimeViewFilter('week')}>
-                      This week
-                    </SidebarMenuButton>
-                    <SidebarMenuButton
-                      isActive={timeViewFilter === 'running'}
-                      onClick={() => setTimeViewFilter('running')}
-                      disabled={!activeTimer.data}
-                      className="justify-between"
-                    >
-                      <span>Running</span>
-                      {activeTimer.data ? <Badge variant="secondary">1</Badge> : null}
-                    </SidebarMenuButton>
-                  </SidebarGroupContent>
-	                </SidebarGroup>
-	              </SidebarContent>
-	            </>
-	          ) : dashboardView === 'settings' ? (
-	            <>
-	              <SidebarHeader>
-	                <div className="min-w-0">
-	                  <p className="truncate text-xs font-medium">Settings</p>
-	                  <p className="truncate text-[0.625rem] text-muted-foreground">Preferences and project people</p>
-	                </div>
-	              </SidebarHeader>
-
-	              <SidebarContent>
-	                <SidebarGroup>
-	                  <SidebarGroupLabel>Sections</SidebarGroupLabel>
-	                  <SidebarGroupContent>
-	                    <SidebarMenuButton onClick={() => document.getElementById('profile-settings')?.scrollIntoView({ behavior: 'smooth' })}>
-	                      Profile settings
-	                    </SidebarMenuButton>
-	                    <SidebarMenuButton onClick={() => document.getElementById('issue-display-settings')?.scrollIntoView({ behavior: 'smooth' })}>
-	                      Issue defaults
-	                    </SidebarMenuButton>
-	                    <SidebarMenuButton onClick={() => document.getElementById('project-members-settings')?.scrollIntoView({ behavior: 'smooth' })}>
-	                      Project people
-	                    </SidebarMenuButton>
-	                    <SidebarMenuButton onClick={() => document.getElementById('progress-log-settings')?.scrollIntoView({ behavior: 'smooth' })}>
-	                      Product progress
-	                    </SidebarMenuButton>
-	                  </SidebarGroupContent>
-	                </SidebarGroup>
-	              </SidebarContent>
-	            </>
-		          ) : (
-	            <>
-              <SidebarHeader>
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-medium">Invoices</p>
-                  <p className="truncate text-[0.625rem] text-muted-foreground">Coming soon</p>
-                </div>
-              </SidebarHeader>
-
-              <SidebarContent>
-                <SidebarGroup>
-                  <SidebarGroupLabel>Views</SidebarGroupLabel>
-                  <SidebarGroupContent>
-                    <SidebarMenuButton disabled>Drafts</SidebarMenuButton>
-                    <SidebarMenuButton disabled>Sent</SidebarMenuButton>
-                    <SidebarMenuButton disabled>Clients</SidebarMenuButton>
-                  </SidebarGroupContent>
-                </SidebarGroup>
-              </SidebarContent>
-            </>
-	          )}
-	        </Sidebar>
-	
-		        <section className="flex min-w-0 flex-1 flex-col">
-		          <header className="flex h-12 items-center gap-2 border-b border-border/60 px-4">
-		            <SidebarTrigger size="icon" variant="outline" title="Toggle sidebar" />
-		            <div className="min-w-0">
-		              <p className="truncate text-xs font-medium">
-		                {dashboardView === 'issues'
-	                  ? selectedProject
-	                    ? selectedProject.name
-	                    : 'All issues'
-	                  : dashboardView === 'time'
-	                    ? 'Time tracking'
-	                    : dashboardView === 'settings'
-	                      ? 'Settings'
-	                      : 'Invoices'}
-	              </p>
-	              <p className="truncate text-[0.625rem] text-muted-foreground">
-	                {dashboardView === 'issues'
-	                  ? issueStatusFilter === 'all'
-	                    ? 'All statuses'
-	                    : labelForStatus(issueStatusFilter)
-	                  : dashboardView === 'time'
-	                    ? labelForTimeViewFilter(timeViewFilter)
-	                    : dashboardView === 'settings'
-	                      ? 'Manage profile, view defaults, and project members'
-	                      : 'Coming soon'}
-	              </p>
-	            </div>
-
-            <div className="ml-auto flex items-center gap-2">
-              {dashboardView === 'issues' ? (
-                <>
-                  <div className="relative hidden w-64 items-center md:flex">
-                    <RiSearchLine className="pointer-events-none absolute left-2 size-3.5 text-muted-foreground" />
-                    <Input
-                      value={issueSearch}
-                      onChange={(e) => setIssueSearch(e.target.value)}
-                      placeholder="Search issues…"
-                      className="pl-7"
-                    />
-                  </div>
-
-		                  <Select
-		                    value={issueStatusFilter}
-		                    onValueChange={(value) => setIssueStatusFilter(value as IssueStatusFilter)}
-		                  >
-		                    <SelectTrigger size="sm">
-		                      <SelectValue />
-		                    </SelectTrigger>
-	                    <SelectContent>
-	                      <SelectItem value="open">Open</SelectItem>
-	                      <SelectItem value="in_progress">In progress</SelectItem>
-	                      <SelectItem value="done">Done</SelectItem>
-	                      <SelectItem value="closed">Closed</SelectItem>
-	                      <Separator className="my-1" />
-	                      <SelectItem value="all">All</SelectItem>
-		                    </SelectContent>
-		                  </Select>
-
-		                  <Button
-		                    size="sm"
-		                    variant={issueFavoritesOnly ? 'secondary' : 'outline'}
-		                    className="gap-1"
-		                    onClick={() => {
-		                      setIssueFavoritesOnly((prev) => {
-		                        const next = !prev;
-		                        if (next) setIssueStatusFilter('all');
-		                        return next;
-		                      });
-		                    }}
-			                    title={issueFavoritesOnly ? 'Showing favorites' : 'Show favorites'}
-			                  >
-			                    {issueFavoritesOnly ? (
-			                      <RiStarFill className="size-4 text-amber-500" />
-			                    ) : (
-			                      <RiStarLine className="size-4" />
-			                    )}
-			                    <span className="hidden lg:inline">Favorites</span>
-			                  </Button>
-
-		                  <div className="flex items-center gap-1">
-		                    <Button
-		                      size="sm"
-		                      variant={issuesLayout === 'list' ? 'secondary' : 'outline'}
-	                      onClick={() => setIssuesLayout('list')}
-	                    >
-	                      List
-	                    </Button>
-	                    <Button
-	                      size="sm"
-	                      variant={issuesLayout === 'board' ? 'secondary' : 'outline'}
-	                      onClick={() => {
-	                        setIssueStatusFilter('all');
-	                        setIssuesLayout('board');
-	                      }}
-	                    >
-	                      Board
-	                    </Button>
-	                  </div>
-	                </>
-	              ) : null}
-
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button size="icon" variant="outline" className="relative">
-                      <RiNotification3Line />
-                      {unreadNotifications.data?.length ? (
-                        <span className="absolute -right-1 -top-1 inline-flex size-4 items-center justify-center rounded-full bg-primary text-[0.625rem] text-primary-foreground">
-                          {formatInteger(Math.min(9, unreadNotifications.data.length))}
-                        </span>
-                      ) : null}
-                    </Button>
-                  }
-                />
-                <DropdownMenuContent align="end" className="w-[22rem]">
-                  <DropdownMenuGroup>
-                    <DropdownMenuLabel>Notifications</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {(latestNotifications.data ?? []).length === 0 ? (
-                      <div className="px-2 py-2 text-xs text-muted-foreground">No notifications yet.</div>
-                    ) : null}
-                    {(latestNotifications.data ?? []).map((n) => {
-                      const actor = n.actorId ? userById.get(n.actorId) ?? null : null;
-                      const isUnread = n.readAt === null;
-                      return (
-                        <DropdownMenuItem
-                          key={n._id}
-                          onClick={() => {
-                            if (!isUnread) return;
-                            markNotificationRead.mutate({ notificationId: n._id });
-                          }}
-                          className={cn('flex items-start gap-2', isUnread && 'bg-muted/30')}
-                        >
-                          <UserAvatar userId={n.actorId} user={actor} />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
-                              <span className="truncate text-xs font-medium">{n.title}</span>
-                              {isUnread ? <Badge variant="secondary">New</Badge> : null}
-                            </div>
-                            {n.body ? (
-                              <p className="mt-0.5 line-clamp-2 text-[0.625rem] text-muted-foreground">{n.body}</p>
-                            ) : null}
-                          </div>
-                        </DropdownMenuItem>
-                      );
-                    })}
-                  </DropdownMenuGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <div className="hidden items-center gap-2 rounded-md border border-border/60 bg-muted/10 px-2 py-1 md:flex">
-                <RiTimerLine className="size-3.5 text-muted-foreground" />
-                {activeTimer.data ? (
-                  <>
-                    <span className="max-w-[14rem] truncate text-xs">
-                      {activeTimer.data.issueTitle ?? activeTimer.data.description ?? 'Timer running'}
-                    </span>
-                    <span className="text-[0.625rem] text-muted-foreground tabular-nums">
-                      {activeTimerElapsedMs !== null ? formatDuration(activeTimerElapsedMs) : '…'}
-                    </span>
-                    <Button
-                      size="icon-xs"
-                      variant="ghost"
-                      onClick={() => {
-                        if (!activeTimer.data) return;
-                        stopTimer.mutate({ timeEntryId: activeTimer.data._id });
-                      }}
-                      disabled={stopTimer.isPending}
-                    >
-                      <RiStopLine />
-                    </Button>
-                  </>
-                ) : (
-                  <span className="text-xs text-muted-foreground">No timer</span>
-                )}
-              </div>
-            </div>
-          </header>
-
-	          {dashboardView === 'issues' ? (
-	            <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[1fr_520px]">
-            <div className="flex min-w-0 flex-col border-r border-border/60">
-              <div className="border-b border-border/60 p-4">
-                <form onSubmit={handleCreateIssue} className="grid gap-2">
-                  <div className="flex items-center gap-2">
-                    <Input
-                      value={newIssueTitle}
-                      onChange={(e) => setNewIssueTitle(e.target.value)}
-                      placeholder="Create an issue…"
-                      aria-label="Issue title"
-                    />
-                    <Select
-                      value={newIssuePriority}
-                      onValueChange={(value) => setNewIssuePriority(value as IssuePriority)}
-                    >
-                      <SelectTrigger size="sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                        <SelectItem value="urgent">Urgent</SelectItem>
-                      </SelectContent>
-                    </Select>
-	                    <Input
-	                      value={newIssueEstimate}
-	                      onChange={(e) => setNewIssueEstimate(e.target.value)}
-	                      placeholder="Est. (min)"
-	                      className="w-24"
-	                      inputMode="numeric"
-	                    />
-	                    <Button size="icon" disabled={createIssue.isPending} type="submit">
-	                      <RiAddLine />
-	                    </Button>
-	                  </div>
-                  <Textarea
-                    value={newIssueDescription}
-                    onChange={(e) => setNewIssueDescription(e.target.value)}
-                    placeholder="Description (optional)…"
-                    className="min-h-20"
-                  />
-                  <Input
-                    value={newIssueLabels}
-                    onChange={(e) => setNewIssueLabels(e.target.value)}
-                    placeholder="Labels (comma separated)…"
-                    aria-label="Issue labels"
-                  />
-                  {createIssue.error ? (
-                    <p className="text-[0.625rem] text-destructive">Couldn’t create issue.</p>
-                  ) : null}
-                </form>
-              </div>
-
-              <div className="min-h-0 overflow-auto">
-                {issues.isLoading ? (
-                  <div className="p-4 text-xs text-muted-foreground">Loading issues…</div>
-                ) : null}
-
-                {!issues.isLoading && filteredIssues.length === 0 ? (
-                  <div className="p-4 text-xs text-muted-foreground">No issues yet.</div>
-                ) : null}
-
-	                {issuesLayout === 'list' ? (
-	                  <ul className="divide-y divide-border/60">
-	                    {filteredIssues.map((issue) => {
-	                      const selected = issue._id === selectedIssueId;
-	                      const projectName = issue.projectId
-	                        ? (projectById.get(issue.projectId)?.name ?? 'Project')
-	                        : null;
-	                      const estimate = issue.estimateMinutes ? formatEstimate(issue.estimateMinutes) : null;
-	                      const handleOpenIssue = () => {
-	                        if (selected) {
-	                          navigate({ to: '/$projectId/issues', params: { projectId } });
-	                          return;
-	                        }
-	                        navigate({
-	                          to: '/$projectId/issues/$issueId',
-	                          params: { projectId, issueId: issue._id },
-	                        });
-	                      };
-	                      return (
-	                        <li key={issue._id}>
-	                          <div
-	                            role="button"
-	                            tabIndex={0}
-	                            aria-current={selected ? 'true' : undefined}
-	                            onClick={handleOpenIssue}
-	                            onKeyDown={(event) => {
-	                              if (event.key === 'Enter' || event.key === ' ') {
-	                                event.preventDefault();
-	                                handleOpenIssue();
-	                              }
-	                            }}
-	                            className={cn(
-	                              'flex w-full items-start gap-3 px-4 py-3 text-left text-xs transition-colors',
-	                              selected ? 'bg-muted/30' : 'hover:bg-muted/20',
-	                            )}
-	                          >
-	                            <span className="mt-0.5 text-muted-foreground" aria-hidden>
-	                              <StatusIcon status={issue.status} />
-	                            </span>
-	                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="truncate font-medium">{issue.title}</span>
-                                <PriorityPill priority={issue.priority} />
-                              </div>
-                              <IssueLabelsPills labels={issue.labels ?? []} max={2} className="mt-1" />
-                              <div className="mt-1 flex flex-wrap items-center gap-2 text-[0.625rem] text-muted-foreground">
-                                {projectName ? <span className="truncate">{projectName}</span> : null}
-                                <span className="tabular-nums">{timeAgo(issue.lastActivityAt, now)}</span>
-                                {estimate ? <Badge variant="outline">{estimate}</Badge> : null}
-	                              </div>
-	                            </div>
-	
-		                            <div className="mt-0.5 flex items-center gap-2">
-		                              <AssigneeStack assigneeIds={issue.assigneeIds} userById={userById} />
-		                              <Button
-		                                size="icon-xs"
-		                                variant="ghost"
-		                                onClick={(e) => {
-		                                  e.preventDefault();
-		                                  e.stopPropagation();
-		                                  toggleIssueFavorite.mutate({ issueId: issue._id });
-		                                }}
-		                                disabled={toggleIssueFavorite.isPending}
-		                                title={
-		                                  favoriteIssueIdSet.has(issue._id) ? 'Remove from favorites' : 'Add to favorites'
-		                                }
-		                              >
-		                                {favoriteIssueIdSet.has(issue._id) ? (
-		                                  <RiStarFill className="text-amber-500" />
-		                                ) : (
-		                                  <RiStarLine />
-		                                )}
-		                              </Button>
-		                              <Button
-		                                size="icon-xs"
-		                                variant="ghost"
-		                                onClick={(e) => {
-		                                  e.preventDefault();
-	                                  e.stopPropagation();
-	                                  startTimer.mutate({ issueId: issue._id });
-	                                }}
-	                                disabled={startTimer.isPending}
-	                                title="Start timer"
-	                              >
-	                                <RiPlayLine />
-	                              </Button>
-	                            </div>
-	                          </div>
-	                        </li>
-	                      );
-	                    })}
-	                  </ul>
-	                ) : (
-	                  <div className="p-4">
-	                    <div className="flex gap-4 overflow-x-auto pb-4">
-	                      {(['open', 'in_progress', 'done', 'closed'] as const).map((status) => {
-	                        const items = issuesByStatus[status];
-	                        return (
-	                          <div key={status} className="w-72 shrink-0">
-	                            <div className="flex items-center justify-between">
-	                              <p className="text-[0.625rem] font-medium text-muted-foreground">
-	                                {labelForStatus(status)}
-	                              </p>
-	                              <Badge variant="outline">{formatInteger(items.length)}</Badge>
-	                            </div>
-	                            <div className="mt-2 grid gap-2">
-	                              {items.length === 0 ? (
-	                                <div className="rounded-md border border-dashed border-border/60 bg-muted/10 px-3 py-2 text-[0.625rem] text-muted-foreground">
-	                                  No issues
-	                                </div>
-	                              ) : null}
-	                              {items.map((issue) => {
-	                                const selected = issue._id === selectedIssueId;
-	                                const projectName = issue.projectId
-	                                  ? (projectById.get(issue.projectId)?.name ?? 'Project')
-	                                  : null;
-	                                const estimate = issue.estimateMinutes ? formatEstimate(issue.estimateMinutes) : null;
-	                                const handleOpenIssue = () => {
-	                                  if (selected) {
-	                                    navigate({ to: '/$projectId/issues', params: { projectId } });
-	                                    return;
-	                                  }
-	                                  navigate({
-	                                    to: '/$projectId/issues/$issueId',
-	                                    params: { projectId, issueId: issue._id },
-	                                  });
-	                                };
-	                                return (
-	                                  <div
-	                                    key={issue._id}
-	                                    role="button"
-	                                    tabIndex={0}
-	                                    aria-current={selected ? 'true' : undefined}
-	                                    onClick={handleOpenIssue}
-	                                    onKeyDown={(event) => {
-	                                      if (event.key === 'Enter' || event.key === ' ') {
-	                                        event.preventDefault();
-	                                        handleOpenIssue();
-	                                      }
-	                                    }}
-	                                    className={cn(
-	                                      'w-full rounded-md border border-border/60 bg-background px-3 py-2 text-left text-xs transition-colors hover:bg-muted/20',
-	                                      selected && 'ring-1 ring-primary',
-	                                    )}
-	                                  >
-		                                    <div className="flex items-start justify-between gap-2">
-		                                      <div className="min-w-0 flex-1">
-		                                        <p className="truncate font-medium">{issue.title}</p>
-			                                        <div className="mt-1 flex flex-wrap items-center gap-2 text-[0.625rem] text-muted-foreground">
-			                                          {projectName ? <span className="truncate">{projectName}</span> : null}
-			                                          <span className="tabular-nums">
-			                                            {timeAgo(issue.lastActivityAt, now)}
-			                                          </span>
-			                                          {estimate ? <Badge variant="outline">{estimate}</Badge> : null}
-			                                        </div>
-			                                        <IssueLabelsPills labels={issue.labels ?? []} max={2} className="mt-1" />
-			                                      </div>
-		                                      <div className="flex items-center gap-1">
-		                                        <Button
-		                                          size="icon-xs"
-		                                          variant="ghost"
-		                                          onClick={(e) => {
-		                                            e.preventDefault();
-		                                            e.stopPropagation();
-		                                            toggleIssueFavorite.mutate({ issueId: issue._id });
-		                                          }}
-		                                          disabled={toggleIssueFavorite.isPending}
-		                                          title={
-		                                            favoriteIssueIdSet.has(issue._id)
-		                                              ? 'Remove from favorites'
-		                                              : 'Add to favorites'
-		                                          }
-		                                        >
-		                                          {favoriteIssueIdSet.has(issue._id) ? (
-		                                            <RiStarFill className="text-amber-500" />
-		                                          ) : (
-		                                            <RiStarLine />
-		                                          )}
-		                                        </Button>
-		                                        <PriorityPill priority={issue.priority} />
-		                                      </div>
-		                                    </div>
-	                                    <div className="mt-2 flex items-center justify-between gap-2">
-	                                      <AssigneeStack assigneeIds={issue.assigneeIds} userById={userById} />
-	                                    </div>
-	                                  </div>
-	                                );
-	                              })}
-	                            </div>
-	                          </div>
-	                        );
-	                      })}
-	                    </div>
-	                  </div>
-	                )}
-	              </div>
-	            </div>
-
-            <div className="min-h-0 overflow-auto">
-              <div className="border-b border-border/60 p-4">
-                {selectedIssue.data ? (
-                  <>
-	                    <div className="flex items-start justify-between gap-3">
-	                      <div className="min-w-0">
-		                        {selectedIssue.data.parentIssueId ? (
-		                          <button
-		                            type="button"
-		                            className="mb-1 inline-flex items-center gap-1 text-[0.625rem] text-muted-foreground hover:text-foreground"
-		                            onClick={() => {
-		                              const parentId = selectedIssue.data?.parentIssueId;
-		                              if (!parentId) return;
-		                              navigate({
-		                                to: '/$projectId/issues/$issueId',
-		                                params: { projectId, issueId: parentId },
-		                              });
-		                            }}
-		                            title="Go to parent issue"
-		                          >
-	                            <RiArrowLeftLine className="size-3.5" />
-	                            <span className="truncate">{parentIssue.data?.title ?? 'Parent issue'}</span>
-	                          </button>
-	                        ) : null}
-	                        <p className="text-sm font-semibold">{selectedIssue.data.title}</p>
-	                        <p className="mt-1 text-xs text-muted-foreground">
-	                          {selectedIssue.data.projectId
-	                            ? projectById.get(selectedIssue.data.projectId)?.name ?? 'Project'
-	                            : 'No project'}
-	                        </p>
-	                      </div>
-	                      <div className="flex items-center gap-2">
-	                        <Button
-	                          size="icon"
-	                          variant="ghost"
-	                          onClick={() => {
-	                            if (!selectedIssueId) return;
-	                            toggleIssueFavorite.mutate({ issueId: selectedIssueId });
-	                          }}
-	                          disabled={!selectedIssueId || toggleIssueFavorite.isPending}
-	                          title={
-	                            selectedIssueId && favoriteIssueIdSet.has(selectedIssueId)
-	                              ? 'Remove from favorites'
-	                              : 'Add to favorites'
-	                          }
-	                        >
-	                          {selectedIssueId && favoriteIssueIdSet.has(selectedIssueId) ? (
-	                            <RiStarFill className="text-amber-500" />
-	                          ) : (
-	                            <RiStarLine />
-	                          )}
-	                        </Button>
-	                        <Button
-	                          size="icon"
-	                          variant="ghost"
-	                          onClick={() => navigate({ to: '/$projectId/issues', params: { projectId } })}
-                          title="Close"
-                        >
-                          <RiCloseLine />
-                        </Button>
-                        <Select
-                          value={selectedIssue.data.status}
-                          onValueChange={(value) => {
-                            if (!selectedIssueId) return;
-                            setIssueStatus.mutate({ issueId: selectedIssueId, status: value as IssueStatus });
-                          }}
-                        >
-                          <SelectTrigger size="sm">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="open">Open</SelectItem>
-                            <SelectItem value="in_progress">In progress</SelectItem>
-                            <SelectItem value="done">Done</SelectItem>
-                            <SelectItem value="closed">Closed</SelectItem>
-                          </SelectContent>
-                        </Select>
-
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            if (!selectedIssueId || !viewerId) return;
-                            const issue = selectedIssue.data;
-                            if (!issue) return;
-                            const prev = issue.assigneeIds;
-                            const next = prev.includes(viewerId)
-                              ? prev.filter((id) => id !== viewerId)
-                              : [...prev, viewerId];
-                            setIssueAssignees.mutate({ issueId: selectedIssueId, assigneeIds: next });
-                          }}
-                          disabled={!viewerId || setIssueAssignees.isPending}
-                        >
-                          Assign to me
-                        </Button>
-
-	                        <Button
-	                          size="sm"
-	                          variant="outline"
-	                          onClick={() => {
-	                            if (!selectedIssueId) return;
-	                            startTimer.mutate({ issueId: selectedIssueId });
-	                          }}
-	                          disabled={!selectedIssueId || startTimer.isPending}
-	                          title="Start timer"
-	                        >
-	                          <RiPlayLine />
-	                          Start timer
-	                        </Button>
-	                      </div>
-	                    </div>
-
-                    {selectedIssue.data.description ? (
-                      <p className="mt-3 whitespace-pre-wrap text-xs text-muted-foreground">
-                        {selectedIssue.data.description}
-                      </p>
-                    ) : null}
-
-	                    <div className="mt-3 flex flex-wrap items-center gap-2">
-	                      <Badge variant="secondary">{labelForPriority(selectedIssue.data.priority)}</Badge>
-	                      {selectedIssue.data.estimateMinutes ? (
-	                        <Badge variant="outline">{formatEstimate(selectedIssue.data.estimateMinutes)}</Badge>
-	                      ) : null}
-	                      <AssigneeStack assigneeIds={selectedIssue.data.assigneeIds} userById={userById} />
-	                    </div>
-
-	                    <div className="mt-3 grid gap-2">
-	                      <div className="flex items-center justify-between gap-2">
-	                        <p className="text-xs font-medium">Labels</p>
-	                        <span className="text-[0.625rem] text-muted-foreground">Comma separated</span>
-	                      </div>
-	                      <IssueLabelsPills labels={selectedIssue.data.labels ?? []} />
-	                      <form onSubmit={handleSaveIssueLabels} className="flex items-center gap-2">
-	                        <Input
-	                          value={issueLabelsInput}
-	                          onChange={(e) => setIssueLabelsInput(e.target.value)}
-	                          placeholder="bug, billing, frontend…"
-	                          aria-label="Issue labels"
-	                        />
-	                        <Button size="sm" type="submit" variant="outline" disabled={setIssueLabels.isPending}>
-	                          Save
-	                        </Button>
-	                      </form>
-	                      {setIssueLabels.error ? (
-	                        <p className="text-[0.625rem] text-destructive">Couldn’t update labels.</p>
-	                      ) : null}
-	                    </div>
-	                  </>
-	                ) : (
-                  <div className="rounded-lg border border-dashed border-border/60 bg-muted/10 px-3 py-8 text-center text-xs text-muted-foreground">
-                    Select an issue to see details.
-                  </div>
-                )}
-              </div>
-
-	              {selectedIssue.data ? (
-	                <div className="p-4">
-	                  <div>
-	                    <div className="flex items-center justify-between gap-2">
-	                      <p className="text-xs font-medium">Sub-issues</p>
-	                      <Badge variant="outline">{formatInteger((subIssues.data ?? []).length)}</Badge>
-	                    </div>
-
-	                    {subIssues.isLoading ? (
-	                      <p className="mt-2 text-xs text-muted-foreground">Loading sub-issues…</p>
-	                    ) : null}
-
-	                    {!subIssues.isLoading && (subIssues.data ?? []).length === 0 ? (
-	                      <p className="mt-2 text-xs text-muted-foreground">No sub-issues yet.</p>
-	                    ) : null}
-
-	                    <div className="mt-2 grid gap-2">
-	                      {(subIssues.data ?? []).slice(0, 20).map((sub) => {
-	                        const estimate = sub.estimateMinutes ? formatEstimate(sub.estimateMinutes) : null;
-	                        return (
-	                          <button
-	                            key={sub._id}
-	                            type="button"
-	                            onClick={() =>
-	                              navigate({
-	                                to: '/$projectId/issues/$issueId',
-	                                params: { projectId, issueId: sub._id },
-	                              })
-	                            }
-	                            className="flex items-start justify-between gap-3 rounded-md border border-border/60 bg-muted/10 px-2 py-2 text-left text-xs transition-colors hover:bg-muted/20"
-	                          >
-	                            <div className="min-w-0 flex-1">
-	                              <div className="flex items-center gap-2">
-	                                <span className="text-muted-foreground" aria-hidden>
-	                                  <StatusIcon status={sub.status as IssueStatus} />
-	                                </span>
-	                                <span className="truncate font-medium">{sub.title}</span>
-	                                <PriorityPill priority={sub.priority as IssuePriority} />
-	                              </div>
-	                              <div className="mt-1 flex flex-wrap items-center gap-2 text-[0.625rem] text-muted-foreground">
-	                                <span className="tabular-nums">{timeAgo(sub.lastActivityAt, now)}</span>
-	                                {estimate ? <Badge variant="outline">{estimate}</Badge> : null}
-	                              </div>
-	                              <IssueLabelsPills labels={sub.labels ?? []} max={2} className="mt-1" />
-	                            </div>
-	                            <AssigneeStack assigneeIds={sub.assigneeIds} userById={userById} />
-	                          </button>
-	                        );
-	                      })}
-	                    </div>
-
-	                    <form onSubmit={handleCreateSubIssue} className="mt-3 flex items-center gap-2">
-	                      <Input
-	                        value={newSubIssueTitle}
-	                        onChange={(e) => setNewSubIssueTitle(e.target.value)}
-	                        placeholder="New sub-issue…"
-	                        aria-label="Sub-issue title"
-	                      />
-	                      <Select value={newSubIssuePriority} onValueChange={(value) => setNewSubIssuePriority(value as any)}>
-	                        <SelectTrigger size="sm">
-	                          <SelectValue />
-	                        </SelectTrigger>
-	                        <SelectContent>
-	                          <SelectItem value="low">Low</SelectItem>
-	                          <SelectItem value="medium">Medium</SelectItem>
-	                          <SelectItem value="high">High</SelectItem>
-	                          <SelectItem value="urgent">Urgent</SelectItem>
-	                        </SelectContent>
-	                      </Select>
-	                      <Button size="icon" variant="outline" disabled={createIssue.isPending} type="submit">
-	                        <RiAddLine />
-	                      </Button>
-	                    </form>
-	                  </div>
-
-	                  <Separator className="my-4" />
-
-	                  <div className="grid gap-3">
-	                    <p className="text-xs font-medium">Links</p>
-
-	                    <div className="grid gap-3">
-	                      <div className="rounded-md border border-border/60 bg-muted/10 p-3">
-	                        <div className="flex items-center justify-between gap-2">
-	                          <p className="text-[0.625rem] font-medium text-muted-foreground">Blocked by</p>
-	                          <Select
-	                            key={blockedByPickerNonce}
-	                            onValueChange={(value) => {
-	                              if (!selectedIssueId) return;
-	                              toggleIssueLink.mutate({
-	                                issueId: selectedIssueId,
-	                                otherIssueId: value as any,
-	                                type: 'blocked_by',
-	                              });
-	                              setBlockedByPickerNonce((n) => n + 1);
-	                            }}
-	                          >
-	                            <SelectTrigger
-	                              size="sm"
-	                              disabled={!selectedIssueId || blockedByCandidateIssues.length === 0 || toggleIssueLink.isPending}
-	                            >
-	                              <SelectValue placeholder="Add blocker…" />
-	                            </SelectTrigger>
-	                            <SelectContent>
-	                              {blockedByCandidateIssues.map((issue) => (
-	                                <SelectItem key={issue._id} value={issue._id}>
-	                                  {issue.title}
-	                                </SelectItem>
-	                              ))}
-	                            </SelectContent>
-	                          </Select>
-	                        </div>
-	                        <div className="mt-2 grid gap-2">
-	                          {blockedByIssues.isLoading ? (
-	                            <p className="text-xs text-muted-foreground">Loading…</p>
-	                          ) : null}
-	                          {!blockedByIssues.isLoading && (blockedByIssues.data ?? []).length === 0 ? (
-	                            <p className="text-xs text-muted-foreground">Not blocked.</p>
-	                          ) : null}
-	                          {(blockedByIssues.data ?? []).map((blocker) => (
-	                            <div
-	                              key={blocker._id}
-	                              role="button"
-	                              tabIndex={0}
-	                              className="flex w-full items-center justify-between gap-2 rounded-md border border-border/60 bg-background px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted/20"
-	                              onClick={() => {
-	                                navigate({
-	                                  to: '/$projectId/issues/$issueId',
-	                                  params: { projectId, issueId: blocker._id },
-	                                });
-	                              }}
-	                              onKeyDown={(event) => {
-	                                if (event.key === 'Enter' || event.key === ' ') {
-	                                  event.preventDefault();
-	                                  navigate({
-	                                    to: '/$projectId/issues/$issueId',
-	                                    params: { projectId, issueId: blocker._id },
-	                                  });
-	                                }
-	                              }}
-	                            >
-	                              <span className="min-w-0 inline-flex items-center gap-2">
-	                                <span className="text-muted-foreground" aria-hidden>
-	                                  <StatusIcon status={blocker.status as IssueStatus} />
-	                                </span>
-	                                <span className="truncate font-medium">{blocker.title}</span>
-	                                <PriorityPill priority={blocker.priority as IssuePriority} />
-	                              </span>
-	                              <Button
-	                                size="icon-xs"
-	                                variant="ghost"
-	                                onClick={(e) => {
-	                                  e.preventDefault();
-	                                  e.stopPropagation();
-	                                  if (!selectedIssueId) return;
-	                                  toggleIssueLink.mutate({
-	                                    issueId: selectedIssueId,
-	                                    otherIssueId: blocker._id,
-	                                    type: 'blocked_by',
-	                                  });
-	                                }}
-	                                disabled={toggleIssueLink.isPending}
-	                                title="Remove"
-	                                >
-	                                  <RiCloseLine />
-	                                </Button>
-	                            </div>
-	                          ))}
-	                        </div>
-	                      </div>
-
-	                      <div className="rounded-md border border-border/60 bg-muted/10 p-3">
-	                        <div className="flex items-center justify-between gap-2">
-	                          <p className="text-[0.625rem] font-medium text-muted-foreground">Related</p>
-	                          <Select
-	                            key={relatedPickerNonce}
-	                            onValueChange={(value) => {
-	                              if (!selectedIssueId) return;
-	                              toggleIssueLink.mutate({
-	                                issueId: selectedIssueId,
-	                                otherIssueId: value as any,
-	                                type: 'related',
-	                              });
-	                              setRelatedPickerNonce((n) => n + 1);
-	                            }}
-	                          >
-	                            <SelectTrigger
-	                              size="sm"
-	                              disabled={!selectedIssueId || relatedCandidateIssues.length === 0 || toggleIssueLink.isPending}
-	                            >
-	                              <SelectValue placeholder="Add related…" />
-	                            </SelectTrigger>
-	                            <SelectContent>
-	                              {relatedCandidateIssues.map((issue) => (
-	                                <SelectItem key={issue._id} value={issue._id}>
-	                                  {issue.title}
-	                                </SelectItem>
-	                              ))}
-	                            </SelectContent>
-	                          </Select>
-	                        </div>
-	                        <div className="mt-2 grid gap-2">
-	                          {relatedIssues.isLoading ? <p className="text-xs text-muted-foreground">Loading…</p> : null}
-	                          {!relatedIssues.isLoading && (relatedIssues.data ?? []).length === 0 ? (
-	                            <p className="text-xs text-muted-foreground">No related issues.</p>
-	                          ) : null}
-	                          {(relatedIssues.data ?? []).map((related) => (
-	                            <div
-	                              key={related._id}
-	                              role="button"
-	                              tabIndex={0}
-	                              className="flex w-full items-center justify-between gap-2 rounded-md border border-border/60 bg-background px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted/20"
-	                              onClick={() => {
-	                                navigate({
-	                                  to: '/$projectId/issues/$issueId',
-	                                  params: { projectId, issueId: related._id },
-	                                });
-	                              }}
-	                              onKeyDown={(event) => {
-	                                if (event.key === 'Enter' || event.key === ' ') {
-	                                  event.preventDefault();
-	                                  navigate({
-	                                    to: '/$projectId/issues/$issueId',
-	                                    params: { projectId, issueId: related._id },
-	                                  });
-	                                }
-	                              }}
-	                            >
-	                              <span className="min-w-0 inline-flex items-center gap-2">
-	                                <span className="text-muted-foreground" aria-hidden>
-	                                  <StatusIcon status={related.status as IssueStatus} />
-	                                </span>
-	                                <span className="truncate font-medium">{related.title}</span>
-	                                <PriorityPill priority={related.priority as IssuePriority} />
-	                              </span>
-	                              <Button
-	                                size="icon-xs"
-	                                variant="ghost"
-	                                onClick={(e) => {
-	                                  e.preventDefault();
-	                                  e.stopPropagation();
-	                                  if (!selectedIssueId) return;
-	                                  toggleIssueLink.mutate({
-	                                    issueId: selectedIssueId,
-	                                    otherIssueId: related._id,
-	                                    type: 'related',
-	                                  });
-	                                }}
-	                                disabled={toggleIssueLink.isPending}
-	                                title="Remove"
-	                                >
-	                                  <RiCloseLine />
-	                                </Button>
-	                            </div>
-	                          ))}
-	                        </div>
-	                      </div>
-	                    </div>
-
-	                    {toggleIssueLink.error ? (
-	                      <p className="text-[0.625rem] text-destructive">Couldn’t update issue links.</p>
-	                    ) : null}
-	                  </div>
-
-	                  <Separator className="my-4" />
-
-	                  <div className="flex items-center justify-between gap-2">
-	                    <p className="text-xs font-medium">Comments</p>
-	                    {replyToCommentId ? (
-	                      <button
-	                        type="button"
-                        className="text-[0.625rem] text-muted-foreground hover:text-foreground"
-                        onClick={() => setReplyToCommentId(null)}
-                      >
-                        Cancel reply
-                      </button>
-                    ) : null}
-                  </div>
-
-                  <CommentThread
-                    comments={selectedIssueComments.data ?? []}
-                    userById={userById}
-                    onReply={(commentId) => setReplyToCommentId(commentId)}
-                  />
-
-	                  <form onSubmit={handleAddComment} className="mt-3 grid gap-2">
-                    <Textarea
-                      value={newCommentBody}
-                      onChange={(e) => setNewCommentBody(e.target.value)}
-                      placeholder={replyToCommentId ? 'Write a reply…' : 'Write a comment…'}
-                      className="min-h-20"
-                    />
-	                    <div className="flex items-center justify-between gap-2">
-	                      <div className="text-[0.625rem] text-muted-foreground">
-	                        {replyToCommentId ? 'Replying in thread' : 'Commenting on issue'}
-	                      </div>
-	                      <Button size="sm" disabled={addIssueComment.isPending} type="submit">
-	                        Post
-	                      </Button>
-	                    </div>
-                    {addIssueComment.error ? (
-                      <p className="text-[0.625rem] text-destructive">Couldn’t post comment.</p>
-                    ) : null}
-                  </form>
-
-                  <Separator className="my-4" />
-
-                  <p className="text-xs font-medium">Time entries (you)</p>
-                  <div className="mt-2 grid gap-2">
-                    {(issueTimeEntries.data ?? []).length === 0 ? (
-                      <p className="text-xs text-muted-foreground">No time entries for this issue yet.</p>
-                    ) : null}
-                    {(issueTimeEntries.data ?? []).slice(0, 10).map((entry) => {
-                      const durationMs =
-                        entry.endedAt === null ? (now ? now - entry.startedAt : null) : entry.endedAt - entry.startedAt;
-                      return (
-                        <div key={entry._id} className="flex items-center justify-between gap-2 rounded-md border border-border/60 bg-muted/10 px-2 py-1.5 text-xs">
-                          <div className="min-w-0">
-                            <p className="truncate">{entry.description ?? 'Time entry'}</p>
-                            <p className="truncate text-[0.625rem] text-muted-foreground">
-                              {new Date(entry.startedAt).toLocaleString()}
-                            </p>
-                          </div>
-                          <span className="text-[0.625rem] text-muted-foreground tabular-nums">
-                            {durationMs === null ? '…' : formatDuration(Math.max(0, durationMs))}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          </div>
-          ) : dashboardView === 'time' ? (
-            <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[1fr_360px]">
-              <div className="min-h-0 overflow-auto p-4">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-medium">Entries</p>
-                <div className="flex items-center gap-3">
-                  {timeIssueId ? (
-                    <button
-	                      type="button"
-	                      className="text-[0.625rem] text-muted-foreground hover:text-foreground"
-	                      onClick={() => navigate({ to: '/$projectId/time', params: { projectId } })}
-	                    >
-	                      Clear issue filter
-	                    </button>
-                  ) : null}
-                  <span className="text-[0.625rem] text-muted-foreground">
-                    {timeEntriesQuery.isLoading ? 'Loading…' : `${formatInteger(filteredTimeEntries.length)} shown`}
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-3 overflow-hidden rounded-lg border border-border/60">
-                {timeEntriesQuery.isLoading ? (
-                  <div className="p-4 text-xs text-muted-foreground">Loading time entries…</div>
-                ) : null}
-                {!timeEntriesQuery.isLoading && filteredTimeEntries.length === 0 ? (
-                  <div className="p-4 text-xs text-muted-foreground">No time entries yet.</div>
-                ) : null}
-
-                  <div className="divide-y divide-border/60">
-                    {filteredTimeEntries.map((entry) => {
-                      const durationMs =
-                        entry.endedAt === null ? (now ? now - entry.startedAt : null) : entry.endedAt - entry.startedAt;
-                      return (
-                        <div key={entry._id} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
-                          <div className="min-w-0">
-                            <p className="truncate font-medium">
-                              {entry.issueTitle ?? entry.projectName ?? entry.description ?? 'Time entry'}
-                            </p>
-                            <p className="mt-0.5 truncate text-[0.625rem] text-muted-foreground">
-                              {new Date(entry.startedAt).toLocaleString()}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {entry.endedAt === null ? <Badge variant="secondary">Running</Badge> : null}
-                            <span className="text-[0.625rem] text-muted-foreground tabular-nums">
-                              {durationMs === null ? '…' : formatDuration(Math.max(0, durationMs))}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              <div className="border-l border-border/60 p-4">
-                <div className="rounded-lg border border-border/60 bg-muted/10 p-3">
-                  <p className="text-xs font-medium">Active timer</p>
-                  <div className="mt-2 flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-xs">
-                        {activeTimer.data?.issueTitle ?? activeTimer.data?.description ?? 'No timer running'}
-                      </p>
-                      <p className="truncate text-[0.625rem] text-muted-foreground tabular-nums">
-                        {activeTimer.data && activeTimerElapsedMs !== null ? formatDuration(activeTimerElapsedMs) : '—'}
-                      </p>
-                    </div>
-                    {activeTimer.data ? (
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        onClick={() => stopTimer.mutate({ timeEntryId: activeTimer.data?._id })}
-                        disabled={stopTimer.isPending}
-                        title="Stop timer"
-                      >
-                        <RiStopLine />
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-
-	                <form onSubmit={handleStartGeneralTimer} className="mt-4 grid gap-2">
-                  <p className="text-xs font-medium">Start a timer</p>
-                  <Input
-                    value={newTimerDescription}
-                    onChange={(e) => setNewTimerDescription(e.target.value)}
-                    placeholder="What are you working on?"
-                  />
-	                  <Button size="sm" disabled={startTimer.isPending} type="submit">
-	                    <RiPlayLine className="size-4" />
-	                    Start timer
-	                  </Button>
-                  {startTimer.error ? (
-                    <p className="text-[0.625rem] text-destructive">Couldn’t start timer.</p>
-                  ) : null}
-                </form>
-              </div>
-            </div>
-	          ) : dashboardView === 'settings' ? (
-	            <SettingsPanel projectId={projectId} />
-	          ) : (
-	            <div className="min-h-0 flex-1 overflow-auto p-6">
-	              <div className="max-w-2xl">
-                <p className="text-sm font-semibold">Invoices</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Coming soon. Tie issues + tracked time to clients, generate invoice drafts, and email them.
-                </p>
-
-                <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
-                    <p className="text-xs font-medium">Draft invoices</p>
-                    <p className="mt-1 text-[0.625rem] text-muted-foreground">
-                      Group time entries by client/project and review line items.
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
-                    <p className="text-xs font-medium">Send via email</p>
-                    <p className="mt-1 text-[0.625rem] text-muted-foreground">
-                      Planned: Resend integration for sending invoices and reminders.
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
-                    <p className="text-xs font-medium">Rates & clients</p>
-                    <p className="mt-1 text-[0.625rem] text-muted-foreground">
-                      Set hourly rates and map work to the right client.
-                    </p>
-                  </div>
-                  <div className="rounded-lg border border-border/60 bg-muted/10 p-4">
-                    <p className="text-xs font-medium">Audit trail</p>
-                    <p className="mt-1 text-[0.625rem] text-muted-foreground">
-                      Track changes to estimates, status, and assignments.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-	          )}
-	        </section>
+              {dashboardView === 'time' ? timeContent : dashboardView === 'settings' ? <SettingsPanel projectId={projectId} /> : invoicesContent}
+            </section>
+          </>
+        )}
       </SidebarProvider>
-	    </main>
-	  );
-  }
-
-	type IssueStatus = 'open' | 'in_progress' | 'done' | 'closed';
-	type IssueStatusFilter = IssueStatus | 'all';
-	type IssuesLayout = 'list' | 'board';
-	type IssuePriority = 'low' | 'medium' | 'high' | 'urgent';
-	type TimeViewFilter = 'all' | 'today' | 'week' | 'running';
-	type MinimalUser = { name: string | null; email: string | null; pictureUrl: string | null };
-
-function StatusIcon({ status }: { status: IssueStatus }) {
-  const className = 'size-4';
-  switch (status) {
-    case 'open':
-      return <RiCircleLine className={className} />;
-    case 'in_progress':
-      return <RiLoader4Line className={cn(className, 'animate-spin')} />;
-    case 'done':
-      return <RiCheckboxCircleLine className={className} />;
-    case 'closed':
-      return <RiCloseCircleLine className={className} />;
-    default:
-      return <RiCircleLine className={className} />;
-  }
-}
-
-function PriorityPill({ priority }: { priority: IssuePriority }) {
-  const label = labelForPriority(priority);
-  const tone =
-    priority === 'urgent'
-      ? 'bg-destructive/15 text-destructive'
-      : priority === 'high'
-        ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
-        : 'bg-muted/40 text-muted-foreground';
-  return <span className={cn('rounded-md px-1.5 py-0.5 text-[0.625rem] font-medium', tone)}>{label}</span>;
-}
-
-function IssueLabelsPills({
-  labels,
-  max,
-  className,
-}: {
-  labels: Array<string>;
-  max?: number;
-  className?: string;
-}) {
-  if (!labels.length) return null;
-  const visible = typeof max === 'number' ? labels.slice(0, max) : labels;
-  const hidden = labels.length - visible.length;
-
-  return (
-    <div className={cn('flex flex-wrap items-center gap-1', className)}>
-      {visible.map((label, index) => (
-        <Badge key={`${label.toLowerCase()}-${index}`} variant="outline" className="h-5 rounded-md px-1.5 text-[0.625rem]">
-          {label}
-        </Badge>
-      ))}
-      {hidden > 0 ? (
-        <span className="text-[0.625rem] text-muted-foreground">+{formatInteger(hidden)}</span>
-      ) : null}
-    </div>
+    </main>
   );
 }
 
-function labelForPriority(priority: IssuePriority) {
-  switch (priority) {
-    case 'low':
-      return 'Low';
-    case 'medium':
-      return 'Medium';
-    case 'high':
-      return 'High';
-    case 'urgent':
-      return 'Urgent';
-    default:
-      return priority;
-  }
-}
-
-function labelForStatus(status: IssueStatus) {
-  switch (status) {
-    case 'open':
-      return 'Open';
-    case 'in_progress':
-      return 'In progress';
-    case 'done':
-      return 'Done';
-    case 'closed':
-      return 'Closed';
-    default:
-      return status;
-  }
-}
+type TimeViewFilter = 'all' | 'today' | 'week' | 'running';
 
 function labelForTimeViewFilter(view: TimeViewFilter) {
   switch (view) {
@@ -2121,222 +718,4 @@ function startOfLocalWeekMs() {
   d.setDate(d.getDate() - daysSinceMonday);
   d.setHours(0, 0, 0, 0);
   return d.getTime();
-}
-
-function parseMinutes(value: string): number | null {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const n = Number(trimmed);
-  if (!Number.isFinite(n)) return null;
-  if (n < 0) return null;
-  return Math.round(n);
-}
-
-function parseIssueLabelsInput(value: string): Array<string> {
-  const labels = value
-    .split(',')
-    .map((label) => label.trim().replace(/\s+/g, ' '))
-    .filter((label) => label.length > 0)
-    .map((label) => label.slice(0, 32));
-
-  const deduped: Array<string> = [];
-  const seen = new Set<string>();
-  for (const label of labels) {
-    const key = label.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    deduped.push(label);
-    if (deduped.length >= 20) break;
-  }
-
-  return deduped;
-}
-
-function formatEstimate(minutes: number) {
-  if (minutes < 60) return `${formatInteger(minutes)}m`;
-  const hours = minutes / 60;
-  if (Math.abs(hours - Math.round(hours)) < 1e-9) return `${formatInteger(Math.round(hours))}h`;
-  return `${formatOneDecimal(hours)}h`;
-}
-
-function formatDuration(ms: number) {
-  const totalSeconds = Math.floor(ms / 1000);
-  const seconds = totalSeconds % 60;
-  const totalMinutes = Math.floor(totalSeconds / 60);
-  const minutes = totalMinutes % 60;
-  const hours = Math.floor(totalMinutes / 60);
-
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-  }
-  return `${minutes}:${String(seconds).padStart(2, '0')}`;
-}
-
-function timeAgo(timestampMs: number, nowMs: number) {
-  const diffMs = nowMs - timestampMs;
-  const diffSeconds = Math.floor(diffMs / 1000);
-  if (diffSeconds < 5) return 'just now';
-  if (diffSeconds < 60) return `${formatInteger(diffSeconds)}s ago`;
-  const diffMinutes = Math.floor(diffSeconds / 60);
-  if (diffMinutes < 60) return `${formatInteger(diffMinutes)}m ago`;
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) return `${formatInteger(diffHours)}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  return `${formatInteger(diffDays)}d ago`;
-}
-
-const integerNumberFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
-const oneDecimalNumberFormat = new Intl.NumberFormat(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-
-function formatInteger(value: number) {
-  return integerNumberFormat.format(value);
-}
-
-function formatOneDecimal(value: number) {
-  return oneDecimalNumberFormat.format(value);
-}
-
-function shortId(id: string) {
-  if (id.length <= 10) return id;
-  return `${id.slice(0, 6)}…${id.slice(-4)}`;
-}
-
-function UserAvatar({
-  userId,
-  user,
-}: {
-  userId: string | null;
-  user: { name: string | null; email: string | null; pictureUrl: string | null } | null;
-}) {
-  const label = user?.name ?? user?.email ?? userId ?? '?';
-  const initials = getInitials(label);
-
-  if (user?.pictureUrl) {
-    return (
-      <img
-        src={user.pictureUrl}
-        alt={label}
-        className="size-7 shrink-0 rounded-full border border-border/60 object-cover"
-      />
-    );
-  }
-
-  return (
-    <div className="bg-muted/40 text-muted-foreground inline-flex size-7 shrink-0 items-center justify-center rounded-full border border-border/60 text-[0.625rem] font-medium">
-      {initials}
-    </div>
-  );
-}
-
-function getInitials(label: string) {
-  const parts = label.trim().split(/\s+/g).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0]?.slice(0, 2).toUpperCase();
-  return `${parts[0]?.[0] ?? ''}${parts[1]?.[0] ?? ''}`.toUpperCase();
-}
-
-function AssigneeStack({
-  assigneeIds,
-  userById,
-}: {
-  assigneeIds: Array<string>;
-  userById: Map<string, { name: string | null; email: string | null; pictureUrl: string | null }>;
-}) {
-  if (!assigneeIds.length) {
-    return <span className="text-[0.625rem] text-muted-foreground">Unassigned</span>;
-  }
-
-  const visible = assigneeIds.slice(0, 3);
-  const rest = assigneeIds.length - visible.length;
-
-  return (
-    <div className="flex items-center">
-      {visible.map((userId, index) => (
-        <div key={userId} className={cn(index > 0 && '-ml-2')}>
-          <UserAvatar userId={userId} user={userById.get(userId) ?? null} />
-        </div>
-      ))}
-      {rest > 0 ? (
-        <span className="ml-2 text-[0.625rem] text-muted-foreground">+{rest}</span>
-      ) : null}
-    </div>
-  );
-}
-
-function CommentThread({
-  comments,
-  userById,
-  onReply,
-}: {
-  comments: Array<{
-    _id: Id<'issueComments'>;
-    parentCommentId: Id<'issueComments'> | null;
-    authorId: string;
-    body: string;
-    deletedAt: number | null;
-    editedAt: number | null;
-  }>;
-  userById: Map<string, { name: string | null; email: string | null; pictureUrl: string | null }>;
-  onReply: (commentId: Id<'issueComments'>) => void;
-}) {
-  const byParent = useMemo(() => {
-    const map = new Map<string | null, typeof comments>();
-    for (const c of comments) {
-      const key = c.parentCommentId ?? null;
-      const bucket = map.get(key) ?? [];
-      bucket.push(c);
-      map.set(key, bucket);
-    }
-    return map;
-  }, [comments]);
-
-  const render = (parentId: Id<'issueComments'> | null, depth: number) => {
-    const bucket = byParent.get(parentId) ?? [];
-    if (!bucket.length) return null;
-
-    return (
-      <div className={cn(depth > 0 && 'mt-2 border-l border-border/60 pl-3')}>
-        {bucket.map((c) => {
-          const author = userById.get(c.authorId) ?? null;
-          return (
-            <div key={c._id} className="mt-2 rounded-md border border-border/60 bg-muted/10 p-2">
-              <div className="flex items-start gap-2">
-                <UserAvatar userId={c.authorId} user={author} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-xs font-medium text-foreground">
-                      {author?.name ?? author?.email ?? shortId(c.authorId)}
-                    </p>
-                    <button
-                      type="button"
-                      className="text-[0.625rem] text-muted-foreground hover:text-foreground"
-                      onClick={() => onReply(c._id)}
-                    >
-                      Reply
-                    </button>
-                  </div>
-                  <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">{c.body}</p>
-                </div>
-              </div>
-              {render(c._id, depth + 1)}
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
-  return <div className="mt-2">{render(null, 0)}</div>;
-}
-
-function useNow(intervalMs: number | null) {
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    if (!intervalMs) return;
-    const id = window.setInterval(() => setNow(Date.now()), intervalMs);
-    return () => window.clearInterval(id);
-  }, [intervalMs]);
-
-  return now;
 }

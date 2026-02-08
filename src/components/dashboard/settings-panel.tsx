@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { convexQuery, useConvexMutation } from '@convex-dev/react-query';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { RiAddLine, RiDeleteBinLine, RiLoader4Line, RiSaveLine } from '@remixicon/react';
 
@@ -21,11 +21,13 @@ type IssueLayoutPreference = 'list' | 'board';
 type IssueStatusPreference = 'all' | 'open' | 'in_progress' | 'done' | 'closed';
 
 export function SettingsPanel({ projectId }: { projectId: string }) {
+  const queryClient = useQueryClient();
   const viewer = useQuery(convexQuery(api.users.getViewer, {}));
   const settings = useQuery(convexQuery(api.users.getViewerSettings, {}));
   const projects = useQuery(convexQuery(api.projects.listProjects, { includeArchived: false, limit: 200 }));
 
   const updateViewerSettingsFn = useConvexMutation(api.users.updateViewerSettings);
+  const createProjectFn = useConvexMutation(api.projects.createProject);
   const addProjectMemberFn = useConvexMutation(api.projects.addMember);
   const removeProjectMemberFn = useConvexMutation(api.projects.removeMember);
 
@@ -38,6 +40,10 @@ export function SettingsPanel({ projectId }: { projectId: string }) {
   const [issueFavoritesOnlyPreference, setIssueFavoritesOnlyPreference] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
+
+  const [newProjectName, setNewProjectName] = useState('');
+  const [createProjectMessage, setCreateProjectMessage] = useState<string | null>(null);
+  const [createdProjectId, setCreatedProjectId] = useState<Id<'projects'> | null>(null);
 
   const [memberIdentifier, setMemberIdentifier] = useState('');
   const [projectMessage, setProjectMessage] = useState<string | null>(null);
@@ -79,6 +85,14 @@ export function SettingsPanel({ projectId }: { projectId: string }) {
 
   const saveViewerSettings = useMutation({
     mutationFn: updateViewerSettingsFn,
+  });
+  const createProject = useMutation({
+    mutationFn: (args: { name: string; description?: string; color?: string }) => createProjectFn(args),
+    onSuccess: async (nextProjectId) => {
+      setCreatedProjectId(nextProjectId);
+      setCreateProjectMessage('Project created.');
+      await queryClient.invalidateQueries({ queryKey: ['convexQuery'] });
+    },
   });
   const addProjectMember = useMutation({
     mutationFn: addProjectMemberFn,
@@ -139,6 +153,20 @@ export function SettingsPanel({ projectId }: { projectId: string }) {
       setSettingsMessage('Issue view defaults saved.');
     } catch {
       setSettingsMessage('Could not save issue defaults.');
+    }
+  };
+
+  const handleCreateProject = async (event: FormEvent) => {
+    event.preventDefault();
+    setCreateProjectMessage(null);
+    setCreatedProjectId(null);
+    const name = newProjectName.trim();
+    if (!name) return;
+    try {
+      await createProject.mutateAsync({ name });
+      setNewProjectName('');
+    } catch {
+      setCreateProjectMessage('Could not create project.');
     }
   };
 
@@ -302,6 +330,64 @@ export function SettingsPanel({ projectId }: { projectId: string }) {
                 {settingsMessage ? <span className="text-[0.625rem] text-muted-foreground">{settingsMessage}</span> : null}
               </div>
             </form>
+          </CardContent>
+        </Card>
+
+        <Card id="projects-settings">
+          <CardHeader>
+            <CardTitle>Projects</CardTitle>
+            <CardDescription>Create projects and jump to their issue pages.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            <form onSubmit={handleCreateProject} className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <Input
+                value={newProjectName}
+                onChange={(event) => setNewProjectName(event.target.value)}
+                placeholder="New project name"
+              />
+              <Button type="submit" variant="outline" disabled={createProject.isPending || !newProjectName.trim()}>
+                {createProject.isPending ? <RiLoader4Line className="animate-spin" /> : <RiAddLine />}
+                Create
+              </Button>
+            </form>
+
+            {createProjectMessage ? (
+              <div className="text-[0.625rem] text-muted-foreground">
+                {createProjectMessage}{' '}
+                {createdProjectId ? (
+                  <Link to="/$projectId/issues" params={{ projectId: createdProjectId }} className="text-primary underline underline-offset-4">
+                    Open issues
+                  </Link>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="rounded-md border border-border/60">
+              <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
+                <p className="text-xs font-medium">All projects</p>
+                <Badge variant="outline">{availableProjects.length} total</Badge>
+              </div>
+              <div className="divide-y divide-border/60">
+                {availableProjects.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-muted-foreground">No projects yet.</div>
+                ) : null}
+                {availableProjects.map((project) => (
+                  <div key={project._id} className="flex items-center justify-between gap-2 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-medium">{project.name}</p>
+                      <p className="truncate text-[0.625rem] text-muted-foreground">{project.description ?? project._id}</p>
+                    </div>
+                    <Link
+                      to="/$projectId/issues"
+                      params={{ projectId: project._id }}
+                      className="text-[0.625rem] text-primary underline underline-offset-4"
+                    >
+                      Open
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            </div>
           </CardContent>
         </Card>
 
